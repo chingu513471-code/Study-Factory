@@ -394,7 +394,7 @@ const InlineSideDishRequest = () => {
 
         const cleanItems = getCleanItems(requestState);
         if (cleanItems.length === 0) {
-            alert('반찬을 한 개 이상 추가해주세요.');
+            alert('주문하실 반찬을 추가 후 신청 버튼을 눌러주세요.');
             return false;
         }
 
@@ -433,12 +433,18 @@ const InlineSideDishRequest = () => {
     };
 
     const openSubmitModal = (period, deadline) => {
+        const requestState = period === 'am' ? amRequest : pmRequest;
+        const cleanItems = getCleanItems(requestState);
         if (deadline.closed) {
             alert(deadline.closedMessage);
             return;
         }
         if (mySubmittedOrders[period]) {
             alert('이미 신청된 주문이 있습니다. 내 주문내역에서 확인/취소해주세요.');
+            return;
+        }
+        if (cleanItems.length === 0) {
+            alert('주문하실 반찬을 추가 후 신청 버튼을 눌러주세요.');
             return;
         }
         setOrderHistoryModalPeriod('');
@@ -690,7 +696,8 @@ const InlineSideDishRequest = () => {
         ? amDeadline
         : (orderHistoryModalPeriod === 'pm' ? pmDeadline : null);
     const historyTitle = orderHistoryModalPeriod === 'am' ? '점심반찬 주문내역' : '저녁반찬 주문내역';
-    const canCancelHistoryOrder = Boolean(historyOrder && !historyDeadline?.closed);
+    const hasHistoryOrder = Boolean(historyOrder && Array.isArray(historyOrder.items) && historyOrder.items.length > 0);
+    const canCancelHistoryOrder = Boolean(hasHistoryOrder && !historyDeadline?.closed);
 
     return (
         <div style={cardStyle}>
@@ -901,9 +908,9 @@ const InlineSideDishRequest = () => {
                             </button>
                         </div>
 
-                        {!historyOrder ? (
+                        {!hasHistoryOrder ? (
                             <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', background: '#f8fafc', fontSize: '0.82rem', color: '#64748b', fontWeight: '700' }}>
-                                신청된 주문내역이 없습니다.
+                                주문내역이 없습니다.
                             </div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
