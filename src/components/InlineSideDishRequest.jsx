@@ -388,11 +388,6 @@ const InlineSideDishRequest = () => {
             return false;
         }
 
-        if (mySubmittedOrders[period]) {
-            alert('이미 신청된 주문이 있습니다. 내 주문내역에서 취소 후 다시 신청해주세요.');
-            return false;
-        }
-
         const cleanItems = getCleanItems(requestState);
         if (cleanItems.length === 0) {
             alert('주문하실 반찬을 추가 후 신청 버튼을 눌러주세요.');
@@ -406,14 +401,22 @@ const InlineSideDishRequest = () => {
 
         setSavingPeriod(period);
         try {
+            const existingItems = Array.isArray(mySubmittedOrders[period]?.items)
+                ? mySubmittedOrders[period].items.map((item) => ({
+                    name: String(item?.name || '').trim(),
+                    amount: parseAmount(item?.amount)
+                })).filter((item) => item.name && item.amount > 0)
+                : [];
+            const mergedItems = [...existingItems, ...cleanItems];
+
             const { error } = await supabase
                 .from('side_dish_requests')
                 .upsert({
                     user_id: user.id,
                     request_date: selectedDate,
                     period,
-                    items: cleanItems,
-                    total_amount: cleanItems.reduce((sum, item) => sum + item.amount, 0),
+                    items: mergedItems,
+                    total_amount: mergedItems.reduce((sum, item) => sum + item.amount, 0),
                     payment_completed: true,
                     submitted_at: new Date().toISOString()
                 }, { onConflict: 'user_id,request_date,period' });
@@ -438,10 +441,6 @@ const InlineSideDishRequest = () => {
         const cleanItems = getCleanItems(requestState);
         if (deadline.closed) {
             alert(deadline.closedMessage);
-            return;
-        }
-        if (mySubmittedOrders[period]) {
-            alert('이미 신청된 주문이 있습니다. 내 주문내역에서 확인/취소해주세요.');
             return;
         }
         if (cleanItems.length === 0) {
@@ -541,8 +540,7 @@ const InlineSideDishRequest = () => {
     const renderPeriodPanel = (period, title, deadline, requestState) => {
         const totalAmount = getTotalAmount(requestState);
         const factoryTotalAmount = factoryTotals[period] || 0;
-        const hasSubmittedOrder = Boolean(mySubmittedOrders[period]);
-        const isDraftLocked = deadline.closed || hasSubmittedOrder;
+        const isDraftLocked = deadline.closed;
 
         return (
             <div style={panelStyle(deadline.closed)}>
@@ -558,12 +556,6 @@ const InlineSideDishRequest = () => {
                 {deadline.closed && (
                     <div style={{ fontSize: '0.8rem', color: '#dc2626', fontWeight: '700', marginBottom: '8px' }}>
                         {deadline.closedMessage}
-                    </div>
-                )}
-
-                {hasSubmittedOrder && (
-                    <div style={{ fontSize: '0.78rem', color: '#0f766e', fontWeight: '700', marginBottom: '8px' }}>
-                        이미 신청된 주문이 있습니다. 아래 내 주문내역에서 확인/취소해주세요.
                     </div>
                 )}
 
@@ -665,18 +657,18 @@ const InlineSideDishRequest = () => {
                 <button
                     type="button"
                     onClick={() => openSubmitModal(period, deadline)}
-                    disabled={deadline.closed || hasSubmittedOrder}
+                    disabled={deadline.closed}
                     style={{
                         marginTop: '8px',
                         width: '100%',
                         padding: '10px 0',
                         borderRadius: '9px',
                         border: 'none',
-                        background: (deadline.closed || hasSubmittedOrder) ? '#d1d5db' : '#267E82',
+                        background: deadline.closed ? '#d1d5db' : '#267E82',
                         color: 'white',
                         fontSize: '0.84rem',
                         fontWeight: '800',
-                        cursor: (deadline.closed || hasSubmittedOrder) ? 'not-allowed' : 'pointer'
+                        cursor: deadline.closed ? 'not-allowed' : 'pointer'
                     }}
                 >
                     반찬신청
