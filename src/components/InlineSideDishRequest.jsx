@@ -312,7 +312,7 @@ const InlineSideDishRequest = () => {
             ...prev,
             items: [
                 ...prev.items,
-                { id: `${period}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: '', amount: '', isEditing: true }
+                { id: `${period}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: '', amount: '' }
             ]
         }));
     };
@@ -321,29 +321,6 @@ const InlineSideDishRequest = () => {
         setPeriodState(period, (prev) => ({
             ...prev,
             items: prev.items.map((item) => item.id === id ? { ...item, [field]: value } : item)
-        }));
-    };
-
-    const completeItem = (period, id) => {
-        const target = period === 'am' ? amRequest : pmRequest;
-        const item = target.items.find((x) => x.id === id);
-        if (!item) return;
-
-        const name = String(item.name || '').trim();
-        const amount = parseAmount(item.amount);
-
-        if (!name) {
-            alert('반찬명을 입력해주세요.');
-            return;
-        }
-        if (amount <= 0) {
-            alert('금액을 입력해주세요.');
-            return;
-        }
-
-        setPeriodState(period, (prev) => ({
-            ...prev,
-            items: prev.items.map((x) => x.id === id ? { ...x, name, amount: String(amount), isEditing: false } : x)
         }));
     };
 
@@ -380,11 +357,6 @@ const InlineSideDishRequest = () => {
 
         if (!requestState.paymentCompleted) {
             alert('송금을 완료 후 신청해주세요');
-            return false;
-        }
-
-        if (requestState.items.some((item) => item.isEditing)) {
-            alert('추가한 반찬을 완료해주세요.');
             return false;
         }
 
@@ -566,68 +538,44 @@ const InlineSideDishRequest = () => {
 
                     {requestState.items.map((item, index) => (
                         <div key={item.id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '7px 8px' }}>
-                            {item.isEditing ? (
-                                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 78px 52px', gap: '6px', alignItems: 'center', width: '100%' }}>
-                                    <input
-                                        type="text"
-                                        value={item.name}
-                                        onChange={(e) => updateItemField(period, item.id, 'name', e.target.value)}
-                                        placeholder="반찬명"
-                                        disabled={isDraftLocked}
-                                        style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: '7px', fontSize: '0.82rem', outline: 'none' }}
-                                    />
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        value={item.amount}
-                                        onChange={(e) => updateItemField(period, item.id, 'amount', e.target.value)}
-                                        placeholder="금액"
-                                        disabled={isDraftLocked}
-                                        style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: '7px', fontSize: '0.82rem', outline: 'none' }}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => completeItem(period, item.id)}
-                                        disabled={isDraftLocked}
-                                        style={{
-                                            width: '100%',
-                                            padding: '7px 0',
-                                            border: 'none',
-                                            borderRadius: '7px',
-                                            background: isDraftLocked ? '#d1d5db' : '#267E82',
-                                            color: 'white',
-                                            fontSize: '0.78rem',
-                                            fontWeight: '700',
-                                            whiteSpace: 'nowrap',
-                                            cursor: isDraftLocked ? 'not-allowed' : 'pointer'
-                                        }}
-                                    >
-                                        완료
-                                    </button>
-                                </div>
-                            ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                                    <div style={{ fontSize: '0.82rem', color: '#374151' }}>
-                                        {index + 1}. {item.name} · {formatAmount(parseAmount(item.amount))}
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => removeItem(period, item.id)}
-                                        disabled={isDraftLocked}
-                                        style={{
-                                            border: 'none',
-                                            background: 'none',
-                                            color: isDraftLocked ? '#d1d5db' : '#ef4444',
-                                            fontSize: '0.74rem',
-                                            fontWeight: '700',
-                                            cursor: isDraftLocked ? 'not-allowed' : 'pointer',
-                                            padding: 0
-                                        }}
-                                    >
-                                        삭제
-                                    </button>
-                                </div>
-                            )}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 78px 52px', gap: '6px', alignItems: 'center', width: '100%' }}>
+                                <input
+                                    type="text"
+                                    value={item.name}
+                                    onChange={(e) => updateItemField(period, item.id, 'name', e.target.value)}
+                                    placeholder="반찬명"
+                                    disabled={isDraftLocked}
+                                    style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: '7px', fontSize: '0.82rem', outline: 'none' }}
+                                />
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={item.amount}
+                                    onChange={(e) => updateItemField(period, item.id, 'amount', e.target.value)}
+                                    placeholder="금액"
+                                    disabled={isDraftLocked}
+                                    style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: '7px', fontSize: '0.82rem', outline: 'none' }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => removeItem(period, item.id)}
+                                    disabled={isDraftLocked}
+                                    style={{
+                                        width: '100%',
+                                        padding: '7px 0',
+                                        border: 'none',
+                                        borderRadius: '7px',
+                                        background: isDraftLocked ? '#d1d5db' : '#ef4444',
+                                        color: 'white',
+                                        fontSize: '0.74rem',
+                                        fontWeight: '700',
+                                        whiteSpace: 'nowrap',
+                                        cursor: isDraftLocked ? 'not-allowed' : 'pointer'
+                                    }}
+                                >
+                                    삭제
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>
