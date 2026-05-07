@@ -14,6 +14,7 @@ import StaffBeverageOrderList from '../../pages/StaffBeverageOrderList';
 import StaffBeverageServingSheet from '../../pages/StaffBeverageServingSheet';
 import StaffNewHireSchedule from '../../pages/StaffNewHireSchedule';
 import StaffNewBeverageRequestList from '../../pages/StaffNewBeverageRequestList';
+import InlineSideDishRequest from '../InlineSideDishRequest';
 
 const StaffGridMenu = () => {
     const { currentView, navigateTo, goBack } = useDashboardNavigation('grid');
@@ -89,6 +90,21 @@ const StaffGridMenu = () => {
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto' }}>
                     <InlineVacationRequest />
+                </div>
+            </div>
+        );
+    }
+    if (currentView === 'side_dish_request') {
+        return renderWithPadding(
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+                    <button onClick={goBack} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 8px 0 0', display: 'flex', alignItems: 'center' }}>
+                        <ChevronLeft size={24} color="#2d3748" />
+                    </button>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>반찬 신청</h3>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                    <InlineSideDishRequest />
                 </div>
             </div>
         );
@@ -191,6 +207,13 @@ const StaffGridMenu = () => {
                             <UserPlus size={24} />
                         </div>
                         <span style={{ ...labelStyle, lineHeight: '1.2' }}>스탭<br />휴무 신청</span>
+                    </button>
+
+                    <button onClick={() => navigateTo('side_dish_request')} style={menuButtonStyle}>
+                        <div style={{ ...iconContainerStyle, background: '#fff7ed', color: '#c05621' }}>
+                            <ClipboardList size={24} />
+                        </div>
+                        <span style={{ ...labelStyle, lineHeight: '1.2' }}>반찬<br />신청</span>
                     </button>
                 </div>
             </div>
