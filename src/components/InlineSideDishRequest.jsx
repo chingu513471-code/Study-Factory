@@ -117,6 +117,29 @@ const panelStyle = (isClosed) => ({
     opacity: isClosed ? 0.9 : 1
 });
 
+const modalOverlayStyle = {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(15, 23, 42, 0.52)',
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    padding: '12px',
+    overflowY: 'auto',
+    zIndex: 1000
+};
+
+const modalCardStyle = {
+    width: 'min(460px, calc(100vw - 24px))',
+    boxSizing: 'border-box',
+    maxHeight: 'calc(100vh - 24px)',
+    overflowY: 'auto',
+    background: 'white',
+    borderRadius: '14px',
+    padding: '14px',
+    boxShadow: '0 18px 36px rgba(15, 23, 42, 0.28)'
+};
+
 const InlineSideDishRequest = () => {
     const { user } = useAuth();
     const [nowTick, setNowTick] = useState(Date.now());
@@ -647,7 +670,7 @@ const InlineSideDishRequest = () => {
                         cursor: 'pointer'
                     }}
                 >
-                    내 주문내역
+                    {period === 'am' ? '점심반찬 주문내역' : '저녁반찬 주문내역'}
                 </button>
             </div>
         );
@@ -666,7 +689,7 @@ const InlineSideDishRequest = () => {
     const historyDeadline = orderHistoryModalPeriod === 'am'
         ? amDeadline
         : (orderHistoryModalPeriod === 'pm' ? pmDeadline : null);
-    const historyTitle = orderHistoryModalPeriod === 'am' ? '점심' : '저녁';
+    const historyTitle = orderHistoryModalPeriod === 'am' ? '점심반찬 주문내역' : '저녁반찬 주문내역';
     const canCancelHistoryOrder = Boolean(historyOrder && !historyDeadline?.closed);
 
     return (
@@ -740,29 +763,11 @@ const InlineSideDishRequest = () => {
                 <div
                     role="dialog"
                     aria-modal="true"
-                    style={{
-                        position: 'fixed',
-                        inset: 0,
-                        background: 'rgba(15, 23, 42, 0.52)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '14px',
-                        zIndex: 1000
-                    }}
+                    style={modalOverlayStyle}
                     onClick={closeSubmitModal}
                 >
                     <div
-                        style={{
-                            width: '100%',
-                            maxWidth: '460px',
-                            maxHeight: '92vh',
-                            overflowY: 'auto',
-                            background: 'white',
-                            borderRadius: '14px',
-                            padding: '14px',
-                            boxShadow: '0 18px 36px rgba(15, 23, 42, 0.28)'
-                        }}
+                        style={modalCardStyle}
                         onClick={(event) => event.stopPropagation()}
                     >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -869,34 +874,16 @@ const InlineSideDishRequest = () => {
                 <div
                     role="dialog"
                     aria-modal="true"
-                    style={{
-                        position: 'fixed',
-                        inset: 0,
-                        background: 'rgba(15, 23, 42, 0.52)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '14px',
-                        zIndex: 1000
-                    }}
+                    style={modalOverlayStyle}
                     onClick={closeOrderHistoryModal}
                 >
                     <div
-                        style={{
-                            width: '100%',
-                            maxWidth: '460px',
-                            maxHeight: '92vh',
-                            overflowY: 'auto',
-                            background: 'white',
-                            borderRadius: '14px',
-                            padding: '14px',
-                            boxShadow: '0 18px 36px rgba(15, 23, 42, 0.28)'
-                        }}
+                        style={modalCardStyle}
                         onClick={(event) => event.stopPropagation()}
                     >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                             <h4 style={{ margin: 0, fontSize: '1rem', color: '#0f172a', fontWeight: '900' }}>
-                                {`${selectedDateLabel} ${historyTitle} 내 주문내역`}
+                                {`${selectedDateLabel} ${historyTitle}`}
                             </h4>
                             <button
                                 type="button"
