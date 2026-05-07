@@ -9,8 +9,7 @@ const ACCOUNT_TRANSFER_INFO = '신한 110-498-435650 김지원';
 
 const createEmptyRequestState = () => ({
     items: [],
-    paymentCompleted: false,
-    submittedAt: null
+    paymentCompleted: false
 });
 
 const getKstNowParts = (timestamp = Date.now()) => {
@@ -69,6 +68,22 @@ const parseAmount = (value) => {
 
 const formatAmount = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원`;
 const PRIVILEGED_ROLES = new Set(['staff', 'admin', 'manager']);
+const createEmptySubmittedOrders = () => ({ am: null, pm: null });
+
+const formatSubmittedAt = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat('ko-KR', {
+        timeZone: 'Asia/Seoul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).format(date);
+};
 
 const summarizeFactoryTotals = (rows) => {
     const nextTotals = { am: 0, pm: 0 };
@@ -116,7 +131,10 @@ const InlineSideDishRequest = () => {
 
     const [amRequest, setAmRequest] = useState(createEmptyRequestState());
     const [pmRequest, setPmRequest] = useState(createEmptyRequestState());
+    const [mySubmittedOrders, setMySubmittedOrders] = useState(() => createEmptySubmittedOrders());
     const [submitModalPeriod, setSubmitModalPeriod] = useState('');
+    const [orderHistoryModalPeriod, setOrderHistoryModalPeriod] = useState('');
+    const [cancelingPeriod, setCancelingPeriod] = useState('');
 
     const selectedDateLabel = useMemo(() => formatPanelDateLabel(selectedDate), [selectedDate]);
     const amDeadline = useMemo(() => getDeadlineInfo('am', nowParts, selectedDate), [nowParts, selectedDate]);
@@ -199,7 +217,7 @@ const InlineSideDishRequest = () => {
         try {
             const myRequestsResult = await supabase
                 .from('side_dish_requests')
-                .select('period, items, payment_completed, submitted_at')
+                .select('period, items, total_amount, payment_completed, submitted_at')
                 .eq('user_id', user.id)
                 .eq('request_date', selectedDate);
 
@@ -207,25 +225,33 @@ const InlineSideDishRequest = () => {
 
             const nextAm = createEmptyRequestState();
             const nextPm = createEmptyRequestState();
+            const nextSubmittedOrders = createEmptySubmittedOrders();
 
             (myRequestsResult.data || []).forEach((row) => {
                 const normalizedItems = Array.isArray(row.items)
-                    ? row.items.map((item, idx) => ({
-                        id: `${row.period}-${idx}-${Date.now()}`,
-                        name: item?.name || '',
-                        amount: String(item?.amount ?? ''),
-                        isEditing: false
-                    }))
+                    ? row.items
+                        .map((item) => ({
+                            name: String(item?.name || '').trim(),
+                            amount: parseAmount(item?.amount)
+                        }))
+                        .filter((item) => item.name && item.amount > 0)
                     : [];
+                const rowTotalAmount = parseAmount(row.total_amount) > 0
+                    ? parseAmount(row.total_amount)
+                    : normalizedItems.reduce((sum, item) => sum + item.amount, 0);
+                const normalizedPeriod = row.period === 'pm' ? 'pm' : 'am';
 
-                const target = row.period === 'am' ? nextAm : nextPm;
-                target.items = normalizedItems;
-                target.paymentCompleted = Boolean(row.payment_completed);
-                target.submittedAt = row.submitted_at || null;
+                nextSubmittedOrders[normalizedPeriod] = {
+                    items: normalizedItems,
+                    totalAmount: rowTotalAmount,
+                    submittedAt: row.submitted_at || null,
+                    paymentCompleted: Boolean(row.payment_completed)
+                };
             });
 
             setAmRequest(nextAm);
             setPmRequest(nextPm);
+            setMySubmittedOrders(nextSubmittedOrders);
             await fetchFactoryTotals();
             await loadCalendarEvents();
         } catch (error) {
@@ -338,6 +364,11 @@ const InlineSideDishRequest = () => {
             return false;
         }
 
+        if (mySubmittedOrders[period]) {
+            alert('이미 신청된 주문이 있습니다. 내 주문내역에서 취소 후 다시 신청해주세요.');
+            return false;
+        }
+
         const cleanItems = getCleanItems(requestState);
         if (cleanItems.length === 0) {
             alert('반찬을 한 개 이상 추가해주세요.');
@@ -366,6 +397,7 @@ const InlineSideDishRequest = () => {
             if (error) throw error;
 
             alert(`${isLunch ? '점심' : '저녁'} 반찬 신청이 완료되었습니다.`);
+            setPeriodState(period, () => createEmptyRequestState());
             await loadSelectedDateRequests();
             return true;
         } catch (error) {
@@ -382,6 +414,11 @@ const InlineSideDishRequest = () => {
             alert(deadline.closedMessage);
             return;
         }
+        if (mySubmittedOrders[period]) {
+            alert('이미 신청된 주문이 있습니다. 내 주문내역에서 확인/취소해주세요.');
+            return;
+        }
+        setOrderHistoryModalPeriod('');
         setSubmitModalPeriod(period);
     };
 
@@ -397,9 +434,64 @@ const InlineSideDishRequest = () => {
         }
     };
 
+    const openOrderHistoryModal = (period) => {
+        setSubmitModalPeriod('');
+        setOrderHistoryModalPeriod(period);
+    };
+
+    const closeOrderHistoryModal = () => {
+        setOrderHistoryModalPeriod('');
+    };
+
+    const cancelSubmittedOrder = async (period) => {
+        const deadline = period === 'am' ? amDeadline : pmDeadline;
+        const submittedOrder = mySubmittedOrders[period];
+
+        if (deadline.closed) {
+            alert('마감시간 이후에는 주문취소가 불가능합니다.');
+            return false;
+        }
+        if (!submittedOrder) {
+            alert('취소할 주문내역이 없습니다.');
+            return false;
+        }
+        if (!user?.id) {
+            alert('사용자 정보를 찾을 수 없습니다. 다시 로그인해주세요.');
+            return false;
+        }
+        if (!window.confirm('주문을 취소하시겠습니까?')) {
+            return false;
+        }
+
+        setCancelingPeriod(period);
+        try {
+            const { error } = await supabase
+                .from('side_dish_requests')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('request_date', selectedDate)
+                .eq('period', period);
+
+            if (error) throw error;
+
+            alert(`${period === 'am' ? '점심' : '저녁'} 주문이 취소되었습니다.`);
+            await loadSelectedDateRequests();
+            closeOrderHistoryModal();
+            return true;
+        } catch (error) {
+            console.error('Error cancelling side dish request:', error);
+            alert('주문 취소에 실패했습니다.');
+            return false;
+        } finally {
+            setCancelingPeriod('');
+        }
+    };
+
     const renderPeriodPanel = (period, title, deadline, requestState) => {
         const totalAmount = getTotalAmount(requestState);
         const factoryTotalAmount = factoryTotals[period] || 0;
+        const hasSubmittedOrder = Boolean(mySubmittedOrders[period]);
+        const isDraftLocked = deadline.closed || hasSubmittedOrder;
 
         return (
             <div style={panelStyle(deadline.closed)}>
@@ -418,6 +510,12 @@ const InlineSideDishRequest = () => {
                     </div>
                 )}
 
+                {hasSubmittedOrder && (
+                    <div style={{ fontSize: '0.78rem', color: '#0f766e', fontWeight: '700', marginBottom: '8px' }}>
+                        이미 신청된 주문이 있습니다. 아래 내 주문내역에서 확인/취소해주세요.
+                    </div>
+                )}
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     {requestState.items.length === 0 && (
                         <div style={{ fontSize: '0.82rem', color: '#9ca3af' }}>추가 버튼으로 반찬을 입력해주세요.</div>
@@ -432,7 +530,7 @@ const InlineSideDishRequest = () => {
                                         value={item.name}
                                         onChange={(e) => updateItemField(period, item.id, 'name', e.target.value)}
                                         placeholder="반찬명"
-                                        disabled={deadline.closed}
+                                        disabled={isDraftLocked}
                                         style={{ padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: '7px', fontSize: '0.82rem', outline: 'none' }}
                                     />
                                     <input
@@ -441,22 +539,22 @@ const InlineSideDishRequest = () => {
                                         value={item.amount}
                                         onChange={(e) => updateItemField(period, item.id, 'amount', e.target.value)}
                                         placeholder="금액"
-                                        disabled={deadline.closed}
+                                        disabled={isDraftLocked}
                                         style={{ padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: '7px', fontSize: '0.82rem', outline: 'none' }}
                                     />
                                     <button
                                         type="button"
                                         onClick={() => completeItem(period, item.id)}
-                                        disabled={deadline.closed}
+                                        disabled={isDraftLocked}
                                         style={{
                                             padding: '7px 0',
                                             border: 'none',
                                             borderRadius: '7px',
-                                            background: deadline.closed ? '#d1d5db' : '#267E82',
+                                            background: isDraftLocked ? '#d1d5db' : '#267E82',
                                             color: 'white',
                                             fontSize: '0.78rem',
                                             fontWeight: '700',
-                                            cursor: deadline.closed ? 'not-allowed' : 'pointer'
+                                            cursor: isDraftLocked ? 'not-allowed' : 'pointer'
                                         }}
                                     >
                                         완료
@@ -470,14 +568,14 @@ const InlineSideDishRequest = () => {
                                     <button
                                         type="button"
                                         onClick={() => removeItem(period, item.id)}
-                                        disabled={deadline.closed}
+                                        disabled={isDraftLocked}
                                         style={{
                                             border: 'none',
                                             background: 'none',
-                                            color: deadline.closed ? '#d1d5db' : '#ef4444',
+                                            color: isDraftLocked ? '#d1d5db' : '#ef4444',
                                             fontSize: '0.74rem',
                                             fontWeight: '700',
-                                            cursor: deadline.closed ? 'not-allowed' : 'pointer',
+                                            cursor: isDraftLocked ? 'not-allowed' : 'pointer',
                                             padding: 0
                                         }}
                                     >
@@ -491,19 +589,19 @@ const InlineSideDishRequest = () => {
 
                 <button
                     type="button"
-                    onClick={() => addItem(period, deadline.closed)}
-                    disabled={deadline.closed}
+                    onClick={() => addItem(period, isDraftLocked)}
+                    disabled={isDraftLocked}
                     style={{
                         marginTop: '8px',
                         width: '100%',
                         padding: '8px 0',
                         borderRadius: '8px',
-                        border: `1px dashed ${deadline.closed ? '#d1d5db' : '#94a3b8'}`,
+                        border: `1px dashed ${isDraftLocked ? '#d1d5db' : '#94a3b8'}`,
                         background: 'white',
-                        color: deadline.closed ? '#9ca3af' : '#475569',
+                        color: isDraftLocked ? '#9ca3af' : '#475569',
                         fontSize: '0.82rem',
                         fontWeight: '700',
-                        cursor: deadline.closed ? 'not-allowed' : 'pointer'
+                        cursor: isDraftLocked ? 'not-allowed' : 'pointer'
                     }}
                 >
                     + 추가
@@ -516,28 +614,41 @@ const InlineSideDishRequest = () => {
                 <button
                     type="button"
                     onClick={() => openSubmitModal(period, deadline)}
-                    disabled={deadline.closed}
+                    disabled={deadline.closed || hasSubmittedOrder}
                     style={{
                         marginTop: '8px',
                         width: '100%',
                         padding: '10px 0',
                         borderRadius: '9px',
                         border: 'none',
-                        background: deadline.closed ? '#d1d5db' : '#267E82',
+                        background: (deadline.closed || hasSubmittedOrder) ? '#d1d5db' : '#267E82',
                         color: 'white',
                         fontSize: '0.84rem',
                         fontWeight: '800',
-                        cursor: deadline.closed ? 'not-allowed' : 'pointer'
+                        cursor: (deadline.closed || hasSubmittedOrder) ? 'not-allowed' : 'pointer'
                     }}
                 >
                     반찬신청
                 </button>
 
-                {requestState.submittedAt && (
-                    <div style={{ marginTop: '6px', fontSize: '0.72rem', color: '#94a3b8' }}>
-                        신청 완료
-                    </div>
-                )}
+                <button
+                    type="button"
+                    onClick={() => openOrderHistoryModal(period)}
+                    style={{
+                        marginTop: '6px',
+                        width: '100%',
+                        padding: '9px 0',
+                        borderRadius: '9px',
+                        border: '1px solid #cbd5e1',
+                        background: 'white',
+                        color: '#334155',
+                        fontSize: '0.82rem',
+                        fontWeight: '800',
+                        cursor: 'pointer'
+                    }}
+                >
+                    내 주문내역
+                </button>
             </div>
         );
     };
@@ -551,6 +662,12 @@ const InlineSideDishRequest = () => {
     const modalCleanItems = modalRequestState ? getCleanItems(modalRequestState) : [];
     const modalTotalAmount = modalCleanItems.reduce((sum, item) => sum + item.amount, 0);
     const modalTitle = submitModalPeriod === 'am' ? '점심 반찬 신청' : '저녁 반찬 신청';
+    const historyOrder = orderHistoryModalPeriod ? mySubmittedOrders[orderHistoryModalPeriod] : null;
+    const historyDeadline = orderHistoryModalPeriod === 'am'
+        ? amDeadline
+        : (orderHistoryModalPeriod === 'pm' ? pmDeadline : null);
+    const historyTitle = orderHistoryModalPeriod === 'am' ? '점심' : '저녁';
+    const canCancelHistoryOrder = Boolean(historyOrder && !historyDeadline?.closed);
 
     return (
         <div style={cardStyle}>
@@ -744,6 +861,112 @@ const InlineSideDishRequest = () => {
                                 {savingPeriod === submitModalPeriod ? '신청 중...' : '신청하기'}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {orderHistoryModalPeriod && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        background: 'rgba(15, 23, 42, 0.52)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '14px',
+                        zIndex: 1000
+                    }}
+                    onClick={closeOrderHistoryModal}
+                >
+                    <div
+                        style={{
+                            width: '100%',
+                            maxWidth: '460px',
+                            maxHeight: '92vh',
+                            overflowY: 'auto',
+                            background: 'white',
+                            borderRadius: '14px',
+                            padding: '14px',
+                            boxShadow: '0 18px 36px rgba(15, 23, 42, 0.28)'
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <h4 style={{ margin: 0, fontSize: '1rem', color: '#0f172a', fontWeight: '900' }}>
+                                {`${selectedDateLabel} ${historyTitle} 내 주문내역`}
+                            </h4>
+                            <button
+                                type="button"
+                                onClick={closeOrderHistoryModal}
+                                style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    color: '#64748b',
+                                    fontSize: '0.82rem',
+                                    fontWeight: '800',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                닫기
+                            </button>
+                        </div>
+
+                        {!historyOrder ? (
+                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', background: '#f8fafc', fontSize: '0.82rem', color: '#64748b', fontWeight: '700' }}>
+                                신청된 주문내역이 없습니다.
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', background: '#f8fafc' }}>
+                                    <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#0f172a', marginBottom: '8px' }}>
+                                        주문내용
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+                                        {historyOrder.items.map((item, index) => (
+                                            <div key={`${item.name}-${index}`} style={{ fontSize: '0.82rem', color: '#334155', fontWeight: '700' }}>
+                                                {`${index + 1}. ${item.name} ${formatAmount(item.amount)}`}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div style={{ fontSize: '0.87rem', color: '#0f172a', fontWeight: '900' }}>
+                                        총 {formatAmount(historyOrder.totalAmount)}
+                                    </div>
+                                    {historyOrder.submittedAt && (
+                                        <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#64748b', fontWeight: '700' }}>
+                                            신청시간: {formatSubmittedAt(historyOrder.submittedAt)}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {historyDeadline?.closed && (
+                                    <div style={{ fontSize: '0.78rem', color: '#dc2626', fontWeight: '700' }}>
+                                        마감시간 이후에는 주문취소가 불가능합니다.
+                                    </div>
+                                )}
+
+                                <button
+                                    type="button"
+                                    onClick={() => cancelSubmittedOrder(orderHistoryModalPeriod)}
+                                    disabled={!canCancelHistoryOrder || cancelingPeriod === orderHistoryModalPeriod}
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px 0',
+                                        borderRadius: '9px',
+                                        border: 'none',
+                                        background: canCancelHistoryOrder ? '#ef4444' : '#d1d5db',
+                                        color: 'white',
+                                        fontSize: '0.84rem',
+                                        fontWeight: '800',
+                                        cursor: (!canCancelHistoryOrder || cancelingPeriod === orderHistoryModalPeriod) ? 'not-allowed' : 'pointer'
+                                    }}
+                                >
+                                    {cancelingPeriod === orderHistoryModalPeriod ? '취소 처리 중...' : '주문취소'}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
