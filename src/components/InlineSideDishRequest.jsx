@@ -567,14 +567,14 @@ const InlineSideDishRequest = () => {
                     {requestState.items.map((item, index) => (
                         <div key={item.id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '7px 8px' }}>
                             {item.isEditing ? (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 52px', gap: '6px', alignItems: 'center' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 78px 52px', gap: '6px', alignItems: 'center', width: '100%' }}>
                                     <input
                                         type="text"
                                         value={item.name}
                                         onChange={(e) => updateItemField(period, item.id, 'name', e.target.value)}
                                         placeholder="반찬명"
                                         disabled={isDraftLocked}
-                                        style={{ padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: '7px', fontSize: '0.82rem', outline: 'none' }}
+                                        style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: '7px', fontSize: '0.82rem', outline: 'none' }}
                                     />
                                     <input
                                         type="number"
@@ -583,13 +583,14 @@ const InlineSideDishRequest = () => {
                                         onChange={(e) => updateItemField(period, item.id, 'amount', e.target.value)}
                                         placeholder="금액"
                                         disabled={isDraftLocked}
-                                        style={{ padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: '7px', fontSize: '0.82rem', outline: 'none' }}
+                                        style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '7px 8px', border: '1px solid #d1d5db', borderRadius: '7px', fontSize: '0.82rem', outline: 'none' }}
                                     />
                                     <button
                                         type="button"
                                         onClick={() => completeItem(period, item.id)}
                                         disabled={isDraftLocked}
                                         style={{
+                                            width: '100%',
                                             padding: '7px 0',
                                             border: 'none',
                                             borderRadius: '7px',
@@ -597,6 +598,7 @@ const InlineSideDishRequest = () => {
                                             color: 'white',
                                             fontSize: '0.78rem',
                                             fontWeight: '700',
+                                            whiteSpace: 'nowrap',
                                             cursor: isDraftLocked ? 'not-allowed' : 'pointer'
                                         }}
                                     >
