@@ -2,6 +2,12 @@
     "redirects": [
         {
             "source": "/(.*)",
+            "missing": [
+                {
+                    "type": "host",
+                    "value": "studyfactoryapp.vercel.app"
+                }
+            ],
             "destination": "https://studyfactoryapp.vercel.app/$1",
             "permanent": false
         }
