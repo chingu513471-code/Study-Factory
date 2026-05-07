@@ -31,7 +31,8 @@ const EmbeddedCalendar = ({
     onMonthChange,
     compact = false,
     showEvents = true,
-    topAlignedDays = false
+    topAlignedDays = false,
+    condensedEvents = false
 }) => {
     // Internal state for uncontrolled mode
     const [internalMonth, setInternalMonth] = useState(() => {
@@ -100,7 +101,7 @@ const EmbeddedCalendar = ({
 
         // Add empty cells for padding before 1st day
         for (let i = 0; i < firstDay; i++) {
-            days.push(<div key={`empty-${i}`} style={{ minHeight: compact ? '36px' : '48px' }}></div>);
+            days.push(<div key={`empty-${i}`} style={{ minHeight: compact ? (condensedEvents ? '30px' : '36px') : '48px' }}></div>);
         }
 
         // Render actual days
@@ -152,14 +153,14 @@ const EmbeddedCalendar = ({
                     key={dateStr}
                     onClick={() => !disabled && onSelectDate(dateStr)}
                     style={{
-                        minHeight: compact ? '36px' : '60px',
+                        minHeight: compact ? (condensedEvents ? '30px' : '36px') : '60px',
                         height: 'auto',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: alignTop ? 'flex-start' : 'center',
-                        gap: alignTop ? '4px' : '0',
-                        padding: compact ? '3px 2px' : '6px 4px',
+                        gap: alignTop ? (condensedEvents ? '2px' : '4px') : '0',
+                        padding: compact ? (condensedEvents ? '2px 1px' : '3px 2px') : '6px 4px',
                         background: cellBgColor,
                         color: cellTextColor,
                         border: isSelected ? 'none' : `1px solid ${cellBorderColor}`,
@@ -236,18 +237,18 @@ const EmbeddedCalendar = ({
                             <div style={{
                                 display: 'flex',
                                 flexDirection: 'column',
-                                gap: '2px',
+                                gap: condensedEvents ? '1px' : '2px',
                                 width: '100%'
                             }}>
                                 {uniqueLabels.map((item, idx) => (
                                     <div key={idx} style={{
-                                        fontSize: '0.7rem',
+                                        fontSize: condensedEvents ? '0.62rem' : '0.7rem',
                                         fontWeight: 'bold',
                                         color: item.itemTextColor,
                                         backgroundColor: '#ffffff', // White background
                                         border: `1px solid ${item.itemBorderColor}`, // Colored border
                                         borderRadius: '12px', // Rounded pill
-                                        padding: '3px 0',
+                                        padding: condensedEvents ? '1px 0' : '3px 0',
                                         width: '100%',
                                         textAlign: 'center',
                                         lineHeight: 1.2,
@@ -275,8 +276,8 @@ const EmbeddedCalendar = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                marginBottom: compact ? '6px' : '10px',
-                gap: compact ? '10px' : '15px'
+                marginBottom: compact ? (condensedEvents ? '4px' : '6px') : '10px',
+                gap: compact ? (condensedEvents ? '6px' : '10px') : '15px'
             }}>
                 <button
                     onClick={handlePrevMonth}
@@ -315,7 +316,7 @@ const EmbeddedCalendar = ({
             <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(7, 1fr)',
-                marginBottom: compact ? '2px' : '5px',
+                marginBottom: compact ? (condensedEvents ? '1px' : '2px') : '5px',
                 textAlign: 'center'
             }}>
                 {['일', '월', '화', '수', '목', '금', '토'].map((day, idx) => (
@@ -323,7 +324,7 @@ const EmbeddedCalendar = ({
                         fontSize: compact ? '0.75rem' : '0.8rem',
                         fontWeight: 'bold',
                         color: idx === 0 ? '#e53e3e' : idx === 6 ? '#3182ce' : '#718096',
-                        padding: compact ? '2px 0' : '5px 0'
+                        padding: compact ? (condensedEvents ? '1px 0' : '2px 0') : '5px 0'
                     }}>
                         {day}
                     </div>
@@ -334,7 +335,7 @@ const EmbeddedCalendar = ({
             <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(7, 1fr)',
-                gap: compact ? '3px' : '5px'
+                gap: compact ? (condensedEvents ? '2px' : '3px') : '5px'
             }}>
                 {renderCalendarDays()}
             </div>

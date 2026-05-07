@@ -156,8 +156,8 @@ const InlineSideDishRequest = () => {
     const [amRequest, setAmRequest] = useState(createEmptyRequestState());
     const [pmRequest, setPmRequest] = useState(createEmptyRequestState());
     const [mySubmittedOrders, setMySubmittedOrders] = useState(() => createEmptySubmittedOrders());
+    const [activePeriod, setActivePeriod] = useState('am');
     const [submitModalPeriod, setSubmitModalPeriod] = useState('');
-    const [orderHistoryModalPeriod, setOrderHistoryModalPeriod] = useState('');
     const [cancelingItemKey, setCancelingItemKey] = useState('');
 
     const selectedDateLabel = useMemo(() => formatPanelDateLabel(selectedDate), [selectedDate]);
@@ -188,7 +188,7 @@ const InlineSideDishRequest = () => {
                 .map((row) => ({
                     date: row.request_date,
                     type: 'special',
-                    reason: row.period === 'am' ? '오전' : '오후'
+                    reason: '신청'
                 }));
             setCalendarEvents(nextEvents);
         } catch (error) {
@@ -419,7 +419,6 @@ const InlineSideDishRequest = () => {
             alert('주문하실 반찬을 추가 후 신청 버튼을 눌러주세요.');
             return;
         }
-        setOrderHistoryModalPeriod('');
         setSubmitModalPeriod(period);
     };
 
@@ -433,15 +432,6 @@ const InlineSideDishRequest = () => {
         if (success) {
             closeSubmitModal();
         }
-    };
-
-    const openOrderHistoryModal = (period) => {
-        setSubmitModalPeriod('');
-        setOrderHistoryModalPeriod(period);
-    };
-
-    const closeOrderHistoryModal = () => {
-        setOrderHistoryModalPeriod('');
     };
 
     const cancelSubmittedOrderItem = async (period, itemIndex) => {
@@ -623,25 +613,73 @@ const InlineSideDishRequest = () => {
                 >
                     반찬신청
                 </button>
+            </div>
+        );
+    };
 
-                <button
-                    type="button"
-                    onClick={() => openOrderHistoryModal(period)}
-                    style={{
-                        marginTop: '6px',
-                        width: '100%',
-                        padding: '9px 0',
-                        borderRadius: '9px',
-                        border: '1px solid #cbd5e1',
-                        background: 'white',
-                        color: '#334155',
-                        fontSize: '0.82rem',
-                        fontWeight: '800',
-                        cursor: 'pointer'
-                    }}
-                >
-                    {period === 'am' ? '점심반찬 주문내역' : '저녁반찬 주문내역'}
-                </button>
+    const renderSubmittedOrderPanel = (period, title, deadline, submittedOrder) => {
+        const submittedItems = Array.isArray(submittedOrder?.items) ? submittedOrder.items : [];
+        const hasSubmittedItems = submittedItems.length > 0;
+
+        return (
+            <div style={panelStyle(false)}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
+                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '800', color: '#1f2937' }}>{`${selectedDateLabel} ${title}`}</h4>
+                    {submittedOrder?.submittedAt && (
+                        <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: '700' }}>
+                            {formatSubmittedAt(submittedOrder.submittedAt)}
+                        </span>
+                    )}
+                </div>
+
+                {!hasSubmittedItems ? (
+                    <div style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: '700' }}>
+                        아직 신청한 반찬이 없습니다.
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {submittedItems.map((item, index) => {
+                                const itemCancelKey = `${period}-${index}`;
+                                return (
+                                    <div key={`${item.name}-${index}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 10px' }}>
+                                        <div style={{ flex: 1, minWidth: 0, fontSize: '0.82rem', color: '#334155', fontWeight: '700' }}>
+                                            {`${index + 1}. ${item.name} ${formatAmount(item.amount)}`}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => cancelSubmittedOrderItem(period, index)}
+                                            disabled={deadline.closed || cancelingItemKey === itemCancelKey}
+                                            style={{
+                                                border: 'none',
+                                                borderRadius: '7px',
+                                                background: deadline.closed ? '#d1d5db' : '#ef4444',
+                                                color: 'white',
+                                                fontSize: '0.74rem',
+                                                fontWeight: '800',
+                                                padding: '6px 9px',
+                                                cursor: deadline.closed ? 'not-allowed' : (cancelingItemKey === itemCancelKey ? 'wait' : 'pointer'),
+                                                whiteSpace: 'nowrap'
+                                            }}
+                                        >
+                                            {cancelingItemKey === itemCancelKey ? '삭제 중..' : '삭제'}
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div style={{ fontSize: '0.87rem', color: '#0f172a', fontWeight: '900' }}>
+                            합계: {formatAmount(submittedOrder.totalAmount)}
+                        </div>
+                    </div>
+                )}
+
+                {deadline.closed && hasSubmittedItems && (
+                    <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#dc2626', fontWeight: '700' }}>
+                        마감시간 이후에는 신청목록에서 삭제할 수 없습니다.
+                    </div>
+                )}
             </div>
         );
     };
@@ -655,13 +693,6 @@ const InlineSideDishRequest = () => {
     const modalCleanItems = modalRequestState ? getCleanItems(modalRequestState) : [];
     const modalTotalAmount = modalCleanItems.reduce((sum, item) => sum + item.amount, 0);
     const modalTitle = submitModalPeriod === 'am' ? '점심 반찬 신청' : '저녁 반찬 신청';
-    const historyOrder = orderHistoryModalPeriod ? mySubmittedOrders[orderHistoryModalPeriod] : null;
-    const historyDeadline = orderHistoryModalPeriod === 'am'
-        ? amDeadline
-        : (orderHistoryModalPeriod === 'pm' ? pmDeadline : null);
-    const historyTitle = orderHistoryModalPeriod === 'am' ? '점심반찬 주문내역' : '저녁반찬 주문내역';
-    const historyItems = Array.isArray(historyOrder?.items) ? historyOrder.items : [];
-    const hasHistoryOrder = historyItems.length > 0;
 
     const submitModalNode = submitModalPeriod && modalRequestState ? (
         <div
@@ -774,107 +805,17 @@ const InlineSideDishRequest = () => {
         </div>
     ) : null;
 
-    const orderHistoryModalNode = orderHistoryModalPeriod ? (
-        <div
-            role="dialog"
-            aria-modal="true"
-            style={modalOverlayStyle}
-            onClick={closeOrderHistoryModal}
-        >
-            <div
-                style={modalCardStyle}
-                onClick={(event) => event.stopPropagation()}
-            >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <h4 style={{ margin: 0, fontSize: '1rem', color: '#0f172a', fontWeight: '900' }}>
-                        {`${selectedDateLabel} ${historyTitle}`}
-                    </h4>
-                    <button
-                        type="button"
-                        onClick={closeOrderHistoryModal}
-                        style={{
-                            border: 'none',
-                            background: 'none',
-                            color: '#64748b',
-                            fontSize: '0.82rem',
-                            fontWeight: '800',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        닫기
-                    </button>
-                </div>
-
-                {!hasHistoryOrder ? (
-                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', background: '#f8fafc', fontSize: '0.82rem', color: '#64748b', fontWeight: '700' }}>
-                        주문내역이 없습니다.
-                    </div>
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', background: '#f8fafc' }}>
-                            <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#0f172a', marginBottom: '8px' }}>
-                                주문내용
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
-                                {historyItems.map((item, index) => {
-                                    const itemCancelKey = `${orderHistoryModalPeriod}-${index}`;
-                                    return (
-                                        <div key={`${item.name}-${index}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                                            <div style={{ flex: 1, fontSize: '0.82rem', color: '#334155', fontWeight: '700' }}>
-                                                {`${index + 1}. ${item.name} ${formatAmount(item.amount)}`}
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => cancelSubmittedOrderItem(orderHistoryModalPeriod, index)}
-                                                disabled={historyDeadline?.closed || cancelingItemKey === itemCancelKey}
-                                                style={{
-                                                    border: 'none',
-                                                    borderRadius: '7px',
-                                                    background: historyDeadline?.closed ? '#d1d5db' : '#ef4444',
-                                                    color: 'white',
-                                                    fontSize: '0.74rem',
-                                                    fontWeight: '800',
-                                                    padding: '5px 8px',
-                                                    cursor: historyDeadline?.closed ? 'not-allowed' : (cancelingItemKey === itemCancelKey ? 'wait' : 'pointer'),
-                                                    whiteSpace: 'nowrap'
-                                                }}
-                                            >
-                                                {cancelingItemKey === itemCancelKey ? '취소 중...' : '취소'}
-                                            </button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            <div style={{ fontSize: '0.87rem', color: '#0f172a', fontWeight: '900' }}>
-                                총 {formatAmount(historyOrder.totalAmount)}
-                            </div>
-                            {historyOrder.submittedAt && (
-                                <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#64748b', fontWeight: '700' }}>
-                                    신청시간: {formatSubmittedAt(historyOrder.submittedAt)}
-                                </div>
-                            )}
-                        </div>
-
-                        {historyDeadline?.closed && (
-                            <div style={{ fontSize: '0.78rem', color: '#dc2626', fontWeight: '700' }}>
-                                마감시간 이후에는 주문취소가 불가능합니다.
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
-        </div>
-    ) : null;
-
     const portalNode = typeof document !== 'undefined'
         ? createPortal(
-            <>
-                {submitModalNode}
-                {orderHistoryModalNode}
-            </>,
+            submitModalNode,
             document.body
         )
         : null;
+
+    const activeDeadline = activePeriod === 'am' ? amDeadline : pmDeadline;
+    const activeRequestState = activePeriod === 'am' ? amRequest : pmRequest;
+    const activeSubmittedOrder = mySubmittedOrders[activePeriod];
+    const activePeriodLabel = activePeriod === 'am' ? '점심' : '저녁';
 
     return (
         <>
@@ -917,7 +858,7 @@ const InlineSideDishRequest = () => {
                     </div>
                 </div>
 
-                <div style={{ marginBottom: '14px', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '8px' }}>
+                <div style={{ marginBottom: '10px', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '6px' }}>
                     <EmbeddedCalendar
                         selectedDate={selectedDate}
                         onSelectDate={(dateStr) => {
@@ -932,6 +873,7 @@ const InlineSideDishRequest = () => {
                         events={calendarEvents}
                         showEvents={true}
                         topAlignedDays={true}
+                        condensedEvents={true}
                     />
                 </div>
 
@@ -939,8 +881,43 @@ const InlineSideDishRequest = () => {
                     <div style={{ textAlign: 'center', color: '#94a3b8', marginTop: '16px' }}>불러오는 중...</div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {renderPeriodPanel('am', '점심 반찬 신청', amDeadline, amRequest)}
-                        {renderPeriodPanel('pm', '저녁 반찬 신청', pmDeadline, pmRequest)}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
+                            <button
+                                type="button"
+                                onClick={() => setActivePeriod('am')}
+                                style={{
+                                    padding: '10px 0',
+                                    borderRadius: '10px',
+                                    border: activePeriod === 'am' ? 'none' : '1px solid #cbd5e1',
+                                    background: activePeriod === 'am' ? '#267E82' : 'white',
+                                    color: activePeriod === 'am' ? 'white' : '#334155',
+                                    fontSize: '0.84rem',
+                                    fontWeight: '800',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                점심
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActivePeriod('pm')}
+                                style={{
+                                    padding: '10px 0',
+                                    borderRadius: '10px',
+                                    border: activePeriod === 'pm' ? 'none' : '1px solid #cbd5e1',
+                                    background: activePeriod === 'pm' ? '#267E82' : 'white',
+                                    color: activePeriod === 'pm' ? 'white' : '#334155',
+                                    fontSize: '0.84rem',
+                                    fontWeight: '800',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                저녁
+                            </button>
+                        </div>
+
+                        {renderPeriodPanel(activePeriod, `${activePeriodLabel} 반찬 신청`, activeDeadline, activeRequestState)}
+                        {renderSubmittedOrderPanel(activePeriod, `${activePeriodLabel} 신청목록`, activeDeadline, activeSubmittedOrder)}
                     </div>
                 )}
             </div>
