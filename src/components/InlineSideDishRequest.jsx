@@ -67,6 +67,20 @@ const parseAmount = (value) => {
 };
 
 const formatAmount = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원`;
+const PRIVILEGED_ROLES = new Set(['staff', 'admin', 'manager']);
+
+const summarizeFactoryTotals = (rows) => {
+    const nextTotals = { am: 0, pm: 0 };
+    (rows || []).forEach((row) => {
+        const period = row.period === 'pm' ? 'pm' : 'am';
+        let rowTotal = parseAmount(row.total_amount);
+        if (rowTotal <= 0 && Array.isArray(row.items)) {
+            rowTotal = row.items.reduce((sum, item) => sum + parseAmount(item?.amount), 0);
+        }
+        nextTotals[period] += rowTotal;
+    });
+    return nextTotals;
+};
 
 const cardStyle = {
     background: 'white',
@@ -142,33 +156,39 @@ const InlineSideDishRequest = () => {
     const fetchFactoryTotals = useCallback(async () => {
         if (!selectedDate) return;
         try {
-            const { data, error } = await supabase
-                .from('side_dish_requests')
-                .select('period, total_amount, items')
-                .eq('request_date', selectedDate)
-                .eq('payment_completed', true);
+            const { data: totalsData, error: totalsError } = await supabase
+                .rpc('get_side_dish_factory_totals', { target_request_date: selectedDate });
 
-            if (error) {
-                console.warn('Error loading factory side dish totals:', error);
-                setFactoryTotals({ am: 0, pm: 0 });
+            if (totalsError) {
+                // If DB function is not yet deployed, keep staff/admin visibility via direct fallback query.
+                if (!PRIVILEGED_ROLES.has(user?.role)) {
+                    console.warn('Error loading factory side dish totals via RPC:', totalsError);
+                    setFactoryTotals({ am: 0, pm: 0 });
+                    return;
+                }
+
+                const { data: fallbackRows, error: fallbackError } = await supabase
+                    .from('side_dish_requests')
+                    .select('period, total_amount, items')
+                    .eq('request_date', selectedDate)
+                    .eq('payment_completed', true);
+
+                if (fallbackError) {
+                    console.warn('Error loading factory side dish totals fallback:', fallbackError);
+                    setFactoryTotals({ am: 0, pm: 0 });
+                    return;
+                }
+
+                setFactoryTotals(summarizeFactoryTotals(fallbackRows));
                 return;
             }
 
-            const nextTotals = { am: 0, pm: 0 };
-            (data || []).forEach((row) => {
-                const period = row.period === 'pm' ? 'pm' : 'am';
-                let rowTotal = parseAmount(row.total_amount);
-                if (rowTotal <= 0 && Array.isArray(row.items)) {
-                    rowTotal = row.items.reduce((sum, item) => sum + parseAmount(item?.amount), 0);
-                }
-                nextTotals[period] += rowTotal;
-            });
-            setFactoryTotals(nextTotals);
+            setFactoryTotals(summarizeFactoryTotals(totalsData));
         } catch (error) {
             console.warn('Error loading factory side dish totals:', error);
             setFactoryTotals({ am: 0, pm: 0 });
         }
-    }, [selectedDate]);
+    }, [selectedDate, user?.role]);
 
     const loadSelectedDateRequests = useCallback(async () => {
         if (!user?.id || !selectedDate) return;
