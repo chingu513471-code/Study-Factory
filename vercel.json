@@ -1,4 +1,11 @@
 {
+    "redirects": [
+        {
+            "source": "/(.*)",
+            "destination": "https://studyfactoryapp.vercel.app/$1",
+            "permanent": false
+        }
+    ],
     "headers": [
         {
             "source": "/(.*)",
