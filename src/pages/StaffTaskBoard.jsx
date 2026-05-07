@@ -32,6 +32,50 @@ const parseSideDishAmount = (value) => {
     return Number.isFinite(num) ? num : 0;
 };
 
+const normalizeSideDishItems = (items) => (
+    Array.isArray(items)
+        ? items
+            .map((item) => ({
+                name: String(item?.name || '').trim(),
+                amount: parseSideDishAmount(item?.amount)
+            }))
+            .filter((item) => item.name && item.amount > 0)
+        : []
+);
+
+const normalizeSideDishBatches = (items, fallbackSubmittedAt = null) => {
+    if (!Array.isArray(items) || items.length === 0) {
+        return [];
+    }
+
+    const looksLikeBatchList = items.some((item) => Array.isArray(item?.items));
+    if (looksLikeBatchList) {
+        return items
+            .map((batch, index) => {
+                const normalizedItems = normalizeSideDishItems(batch?.items);
+                if (normalizedItems.length === 0) return null;
+
+                return {
+                    batchId: String(batch?.batchId || `batch-${index}`),
+                    items: normalizedItems,
+                    submittedAt: batch?.submittedAt || fallbackSubmittedAt || null
+                };
+            })
+            .filter(Boolean);
+    }
+
+    const normalizedItems = normalizeSideDishItems(items);
+    if (normalizedItems.length === 0) {
+        return [];
+    }
+
+    return [{
+        batchId: 'legacy-batch-0',
+        items: normalizedItems,
+        submittedAt: fallbackSubmittedAt || null
+    }];
+};
+
 const StaffTaskBoard = () => {
     const { user } = useAuth();
     const [view, setView] = useState(() => localStorage.getItem('staff_task_board_view') || 'tasks'); // 'tasks' | 'schedule'
@@ -159,20 +203,14 @@ const StaffTaskBoard = () => {
                 const normalizedSideDish = (sideDishData || [])
                     .filter((row) => row.payment_completed && row.submitted_at)
                     .map((row) => {
-                        const normalizedItems = Array.isArray(row.items)
-                            ? row.items
-                                .map((item) => ({
-                                    name: item?.name || '',
-                                    amount: parseSideDishAmount(item?.amount)
-                                }))
-                                .filter((item) => item.name && item.amount > 0)
-                            : [];
-
+                        const normalizedBatches = normalizeSideDishBatches(row.items, row.submitted_at);
+                        const normalizedItems = normalizedBatches.flatMap((batch) => batch.items);
                         const calculatedTotal = normalizedItems.reduce((sum, item) => sum + item.amount, 0);
 
                         return {
                             id: row.id,
                             period: row.period,
+                            batches: normalizedBatches,
                             items: normalizedItems,
                             totalAmount: row.total_amount || calculatedTotal,
                             requesterName: row.requester?.name || '알수없음',

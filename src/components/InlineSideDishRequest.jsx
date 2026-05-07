@@ -69,7 +69,67 @@ const parseAmount = (value) => {
 
 const formatAmount = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원`;
 const PRIVILEGED_ROLES = new Set(['staff', 'admin', 'manager']);
-const createEmptySubmittedOrders = () => ({ am: null, pm: null });
+const createEmptySubmittedOrderState = () => ({
+    batches: [],
+    totalAmount: 0,
+    submittedAt: null,
+    paymentCompleted: false
+});
+const createEmptySubmittedOrders = () => ({ am: createEmptySubmittedOrderState(), pm: createEmptySubmittedOrderState() });
+
+const normalizeSubmittedItems = (items) => (
+    Array.isArray(items)
+        ? items
+            .map((item) => ({
+                name: String(item?.name || '').trim(),
+                amount: parseAmount(item?.amount)
+            }))
+            .filter((item) => item.name && item.amount > 0)
+        : []
+);
+
+const normalizeSubmittedBatches = (items, fallbackSubmittedAt = null) => {
+    if (!Array.isArray(items) || items.length === 0) {
+        return [];
+    }
+
+    const looksLikeBatchList = items.some((item) => Array.isArray(item?.items));
+    if (looksLikeBatchList) {
+        return items
+            .map((batch, index) => {
+                const normalizedItems = normalizeSubmittedItems(batch?.items);
+                const totalAmount = parseAmount(batch?.totalAmount) > 0
+                    ? parseAmount(batch?.totalAmount)
+                    : normalizedItems.reduce((sum, item) => sum + item.amount, 0);
+
+                if (normalizedItems.length === 0) return null;
+
+                return {
+                    batchId: String(batch?.batchId || `batch-${index}`),
+                    items: normalizedItems,
+                    totalAmount,
+                    submittedAt: batch?.submittedAt || fallbackSubmittedAt || null
+                };
+            })
+            .filter(Boolean);
+    }
+
+    const normalizedItems = normalizeSubmittedItems(items);
+    if (normalizedItems.length === 0) {
+        return [];
+    }
+
+    return [{
+        batchId: 'legacy-batch-0',
+        items: normalizedItems,
+        totalAmount: normalizedItems.reduce((sum, item) => sum + item.amount, 0),
+        submittedAt: fallbackSubmittedAt || null
+    }];
+};
+
+const getSubmittedBatchesTotal = (batches) => (
+    (batches || []).reduce((sum, batch) => sum + parseAmount(batch?.totalAmount), 0)
+);
 
 const formatSubmittedAt = (value) => {
     if (!value) return '';
@@ -90,9 +150,10 @@ const summarizeFactoryTotals = (rows) => {
     const nextTotals = { am: 0, pm: 0 };
     (rows || []).forEach((row) => {
         const period = row.period === 'pm' ? 'pm' : 'am';
+        const normalizedBatches = normalizeSubmittedBatches(row.items, row.submitted_at || null);
         let rowTotal = parseAmount(row.total_amount);
-        if (rowTotal <= 0 && Array.isArray(row.items)) {
-            rowTotal = row.items.reduce((sum, item) => sum + parseAmount(item?.amount), 0);
+        if (rowTotal <= 0) {
+            rowTotal = getSubmittedBatchesTotal(normalizedBatches);
         }
         nextTotals[period] += rowTotal;
     });
@@ -252,23 +313,19 @@ const InlineSideDishRequest = () => {
             const nextSubmittedOrders = createEmptySubmittedOrders();
 
             (myRequestsResult.data || []).forEach((row) => {
-                const normalizedItems = Array.isArray(row.items)
-                    ? row.items
-                        .map((item) => ({
-                            name: String(item?.name || '').trim(),
-                            amount: parseAmount(item?.amount)
-                        }))
-                        .filter((item) => item.name && item.amount > 0)
-                    : [];
+                const normalizedBatches = normalizeSubmittedBatches(row.items, row.submitted_at || null);
                 const rowTotalAmount = parseAmount(row.total_amount) > 0
                     ? parseAmount(row.total_amount)
-                    : normalizedItems.reduce((sum, item) => sum + item.amount, 0);
+                    : getSubmittedBatchesTotal(normalizedBatches);
                 const normalizedPeriod = row.period === 'pm' ? 'pm' : 'am';
+                const latestSubmittedAt = normalizedBatches.length > 0
+                    ? normalizedBatches[normalizedBatches.length - 1].submittedAt
+                    : (row.submitted_at || null);
 
                 nextSubmittedOrders[normalizedPeriod] = {
-                    items: normalizedItems,
+                    batches: normalizedBatches,
                     totalAmount: rowTotalAmount,
-                    submittedAt: row.submitted_at || null,
+                    submittedAt: latestSubmittedAt,
                     paymentCompleted: Boolean(row.payment_completed)
                 };
             });
@@ -373,13 +430,18 @@ const InlineSideDishRequest = () => {
 
         setSavingPeriod(period);
         try {
-            const existingItems = Array.isArray(mySubmittedOrders[period]?.items)
-                ? mySubmittedOrders[period].items.map((item) => ({
-                    name: String(item?.name || '').trim(),
-                    amount: parseAmount(item?.amount)
-                })).filter((item) => item.name && item.amount > 0)
+            const submittedAt = new Date().toISOString();
+            const existingBatches = Array.isArray(mySubmittedOrders[period]?.batches)
+                ? mySubmittedOrders[period].batches
                 : [];
-            const mergedItems = [...existingItems, ...cleanItems];
+            const nextBatch = {
+                batchId: `${period}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                items: cleanItems,
+                totalAmount: cleanItems.reduce((sum, item) => sum + item.amount, 0),
+                submittedAt
+            };
+            const mergedBatches = [...existingBatches, nextBatch];
+            const totalAmount = getSubmittedBatchesTotal(mergedBatches);
 
             const { error } = await supabase
                 .from('side_dish_requests')
@@ -387,10 +449,10 @@ const InlineSideDishRequest = () => {
                     user_id: user.id,
                     request_date: selectedDate,
                     period,
-                    items: mergedItems,
-                    total_amount: mergedItems.reduce((sum, item) => sum + item.amount, 0),
+                    items: mergedBatches,
+                    total_amount: totalAmount,
                     payment_completed: true,
-                    submitted_at: new Date().toISOString()
+                    submitted_at: submittedAt
                 }, { onConflict: 'user_id,request_date,period' });
 
             if (error) throw error;
@@ -434,17 +496,18 @@ const InlineSideDishRequest = () => {
         }
     };
 
-    const cancelSubmittedOrderItem = async (period, itemIndex) => {
+    const cancelSubmittedOrderBatch = async (period, batchIndex) => {
         const deadline = period === 'am' ? amDeadline : pmDeadline;
         const submittedOrder = mySubmittedOrders[period];
-        const orderItems = Array.isArray(submittedOrder?.items) ? submittedOrder.items : [];
-        const targetItem = orderItems[itemIndex];
+        const orderBatches = Array.isArray(submittedOrder?.batches) ? submittedOrder.batches : [];
+        const targetBatch = orderBatches[batchIndex];
+        const batchLabel = `${batchIndex + 1}번째 주문`;
 
         if (deadline.closed) {
             alert('마감시간 이후에는 주문취소가 불가능합니다.');
             return false;
         }
-        if (!submittedOrder || !targetItem) {
+        if (!submittedOrder || !targetBatch) {
             alert('취소할 주문내역이 없습니다.');
             return false;
         }
@@ -452,18 +515,18 @@ const InlineSideDishRequest = () => {
             alert('사용자 정보를 찾을 수 없습니다. 다시 로그인해주세요.');
             return false;
         }
-        if (!window.confirm(`${targetItem.name} 주문을 취소하시겠습니까?`)) {
+        if (!window.confirm(`${batchLabel}을 통째로 삭제하시겠습니까?`)) {
             return false;
         }
 
-        const itemKey = `${period}-${itemIndex}`;
+        const itemKey = `${period}-batch-${batchIndex}`;
         setCancelingItemKey(itemKey);
         try {
-            const remainingItems = orderItems.filter((_, index) => index !== itemIndex);
-            const totalAmount = remainingItems.reduce((sum, item) => sum + parseAmount(item.amount), 0);
+            const remainingBatches = orderBatches.filter((_, index) => index !== batchIndex);
+            const totalAmount = getSubmittedBatchesTotal(remainingBatches);
             let error = null;
 
-            if (remainingItems.length === 0) {
+            if (remainingBatches.length === 0) {
                 const deleteResult = await supabase
                     .from('side_dish_requests')
                     .delete()
@@ -475,9 +538,10 @@ const InlineSideDishRequest = () => {
                 const updateResult = await supabase
                     .from('side_dish_requests')
                     .update({
-                        items: remainingItems,
+                        items: remainingBatches,
                         total_amount: totalAmount,
-                        payment_completed: true
+                        payment_completed: true,
+                        submitted_at: remainingBatches[remainingBatches.length - 1]?.submittedAt || null
                     })
                     .eq('user_id', user.id)
                     .eq('request_date', selectedDate)
@@ -487,7 +551,7 @@ const InlineSideDishRequest = () => {
 
             if (error) throw error;
 
-            alert(`${targetItem.name} 주문이 취소되었습니다.`);
+            alert(`${batchLabel}이 삭제되었습니다.`);
             await loadSelectedDateRequests();
             return true;
         } catch (error) {
@@ -618,8 +682,8 @@ const InlineSideDishRequest = () => {
     };
 
     const renderSubmittedOrderPanel = (period, title, deadline, submittedOrder) => {
-        const submittedItems = Array.isArray(submittedOrder?.items) ? submittedOrder.items : [];
-        const hasSubmittedItems = submittedItems.length > 0;
+        const submittedBatches = Array.isArray(submittedOrder?.batches) ? submittedOrder.batches : [];
+        const hasSubmittedItems = submittedBatches.length > 0;
 
         return (
             <div style={panelStyle(false)}>
@@ -639,31 +703,52 @@ const InlineSideDishRequest = () => {
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {submittedItems.map((item, index) => {
-                                const itemCancelKey = `${period}-${index}`;
+                            {submittedBatches.map((batch, index) => {
+                                const itemCancelKey = `${period}-batch-${index}`;
                                 return (
-                                    <div key={`${item.name}-${index}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 10px' }}>
-                                        <div style={{ flex: 1, minWidth: 0, fontSize: '0.82rem', color: '#334155', fontWeight: '700' }}>
-                                            {`${index + 1}. ${item.name} ${formatAmount(item.amount)}`}
+                                    <div key={batch.batchId || `${period}-batch-${index}`} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '10px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '8px' }}>
+                                            <div>
+                                                <div style={{ fontSize: '0.84rem', color: '#0f172a', fontWeight: '800' }}>
+                                                    {`${index + 1}번째 주문`}
+                                                </div>
+                                                {batch.submittedAt && (
+                                                    <div style={{ marginTop: '3px', fontSize: '0.74rem', color: '#64748b', fontWeight: '700' }}>
+                                                        {formatSubmittedAt(batch.submittedAt)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => cancelSubmittedOrderBatch(period, index)}
+                                                disabled={deadline.closed || cancelingItemKey === itemCancelKey}
+                                                style={{
+                                                    border: 'none',
+                                                    borderRadius: '7px',
+                                                    background: deadline.closed ? '#d1d5db' : '#ef4444',
+                                                    color: 'white',
+                                                    fontSize: '0.74rem',
+                                                    fontWeight: '800',
+                                                    padding: '6px 9px',
+                                                    cursor: deadline.closed ? 'not-allowed' : (cancelingItemKey === itemCancelKey ? 'wait' : 'pointer'),
+                                                    whiteSpace: 'nowrap'
+                                                }}
+                                            >
+                                                {cancelingItemKey === itemCancelKey ? '삭제 중..' : '주문취소'}
+                                            </button>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => cancelSubmittedOrderItem(period, index)}
-                                            disabled={deadline.closed || cancelingItemKey === itemCancelKey}
-                                            style={{
-                                                border: 'none',
-                                                borderRadius: '7px',
-                                                background: deadline.closed ? '#d1d5db' : '#ef4444',
-                                                color: 'white',
-                                                fontSize: '0.74rem',
-                                                fontWeight: '800',
-                                                padding: '6px 9px',
-                                                cursor: deadline.closed ? 'not-allowed' : (cancelingItemKey === itemCancelKey ? 'wait' : 'pointer'),
-                                                whiteSpace: 'nowrap'
-                                            }}
-                                        >
-                                            {cancelingItemKey === itemCancelKey ? '삭제 중..' : '삭제'}
-                                        </button>
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                            {batch.items.map((item, itemIndex) => (
+                                                <div key={`${batch.batchId || index}-${item.name}-${itemIndex}`} style={{ fontSize: '0.82rem', color: '#334155', fontWeight: '700' }}>
+                                                    {`${itemIndex + 1}. ${item.name} ${formatAmount(item.amount)}`}
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div style={{ marginTop: '8px', fontSize: '0.84rem', color: '#0f172a', fontWeight: '900' }}>
+                                            세트 합계: {formatAmount(batch.totalAmount)}
+                                        </div>
                                     </div>
                                 );
                             })}
