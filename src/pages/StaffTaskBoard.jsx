@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { Plus, Check, Trash2, AlertCircle, MessageCircle, Edit2, ChevronDown, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { appendManagerReplyToContent, buildContentWithReplies, parseContentWithReplies } from '../utils/replyContent';
+import EmbeddedCalendar from '../components/EmbeddedCalendar';
 
 const NEW_HIRE_NOTICE_DISMISS_PREFIX = '__NEW_HIRE_NOTICE_DISMISSED__';
 
@@ -30,6 +31,14 @@ const getKstTodayString = () => {
 const parseSideDishAmount = (value) => {
     const num = Number(value);
     return Number.isFinite(num) ? num : 0;
+};
+
+const formatSideDishDateLabel = (dateStr) => {
+    const [year, month, day] = String(dateStr || '').split('-').map(Number);
+    if (!year || !month || !day) return '';
+    const date = new Date(year, month - 1, day);
+    const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+    return `${month}/${day}(${weekdays[date.getDay()]})`;
 };
 
 const normalizeSideDishItems = (items) => (
@@ -91,6 +100,8 @@ const StaffTaskBoard = () => {
     const [sideDishRequests, setSideDishRequests] = useState([]);
     const [isSideDishPopupOpen, setIsSideDishPopupOpen] = useState(false);
     const [kstToday, setKstToday] = useState(() => getKstTodayString());
+    const [selectedSideDishDate, setSelectedSideDishDate] = useState(() => getKstTodayString());
+    const [isSideDishCalendarOpen, setIsSideDishCalendarOpen] = useState(false);
 
     useEffect(() => {
         if (!isSideDishPopupOpen || typeof document === 'undefined') return undefined;
@@ -101,6 +112,12 @@ const StaffTaskBoard = () => {
         return () => {
             document.body.style.overflow = prevOverflow;
         };
+    }, [isSideDishPopupOpen]);
+
+    useEffect(() => {
+        if (!isSideDishPopupOpen) {
+            setIsSideDishCalendarOpen(false);
+        }
     }, [isSideDishPopupOpen]);
 
     useEffect(() => {
@@ -193,7 +210,7 @@ const StaffTaskBoard = () => {
                     submitted_at,
                     requester:user_id ( name, branch, seat_number )
                 `)
-                .eq('request_date', kstToday)
+                .eq('request_date', selectedSideDishDate)
                 .order('submitted_at', { ascending: true });
 
             if (sideDishError) {
@@ -290,7 +307,7 @@ const StaffTaskBoard = () => {
 
     useEffect(() => {
         fetchData();
-    }, [kstToday]);
+    }, [kstToday, selectedSideDishDate]);
 
     // Add Staff Todo
     const handleAddTodo = async () => {
@@ -558,6 +575,7 @@ const StaffTaskBoard = () => {
     }, [selectedBranch, sideDishRequests]);
 
     const formatWon = (amount) => `${Number(amount || 0).toLocaleString('ko-KR')}원`;
+    const sideDishDateLabel = formatSideDishDateLabel(selectedSideDishDate);
 
 
     // Render Helper
@@ -654,11 +672,34 @@ const StaffTaskBoard = () => {
                         background: 'white',
                         borderRadius: '14px',
                         border: '1px solid #e2e8f0',
-                        padding: '14px'
+                        padding: '14px',
+                        position: 'relative'
                     }}
                 >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                        <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e293b' }}>반찬신청 목록</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e293b' }}>반찬신청 목록</div>
+                            <button
+                                type="button"
+                                onClick={() => setIsSideDishCalendarOpen((prev) => !prev)}
+                                style={{
+                                    border: '1px solid #cbd5e0',
+                                    background: '#f8fafc',
+                                    color: '#334155',
+                                    borderRadius: '8px',
+                                    padding: '5px 9px',
+                                    fontSize: '0.78rem',
+                                    fontWeight: '700',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                }}
+                            >
+                                <Calendar size={14} />
+                                {sideDishDateLabel || selectedSideDishDate}
+                            </button>
+                        </div>
                         <button
                             type="button"
                             onClick={() => setIsSideDishPopupOpen(false)}
@@ -676,6 +717,31 @@ const StaffTaskBoard = () => {
                             닫기
                         </button>
                     </div>
+
+                    {isSideDishCalendarOpen && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '52px',
+                            left: '14px',
+                            zIndex: 2,
+                            width: 'min(320px, calc(100% - 28px))',
+                            background: 'white',
+                            border: '1px solid #dbe4ee',
+                            borderRadius: '12px',
+                            padding: '8px',
+                            boxShadow: '0 18px 30px rgba(15, 23, 42, 0.14)'
+                        }}>
+                            <EmbeddedCalendar
+                                selectedDate={selectedSideDishDate}
+                                onSelectDate={(dateStr) => {
+                                    setSelectedSideDishDate(dateStr);
+                                    setIsSideDishCalendarOpen(false);
+                                }}
+                                compact={true}
+                                showEvents={false}
+                            />
+                        </div>
+                    )}
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {renderSideDishPeriodList('오전 반찬 신청', sideDishSummary.am)}

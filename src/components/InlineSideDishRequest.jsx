@@ -235,7 +235,7 @@ const InlineSideDishRequest = () => {
         try {
             const { data, error } = await supabase
                 .from('side_dish_requests')
-                .select('request_date, period')
+                .select('request_date, period, items, payment_completed, submitted_at')
                 .eq('user_id', user.id);
 
             if (error) {
@@ -245,7 +245,11 @@ const InlineSideDishRequest = () => {
             }
 
             const nextEvents = (data || [])
-                .filter((row) => row.request_date && row.period)
+                .filter((row) => {
+                    if (!row.request_date || !row.period || !row.payment_completed) return false;
+                    const batches = normalizeSubmittedBatches(row.items, row.submitted_at || null);
+                    return batches.length > 0;
+                })
                 .map((row) => ({
                     date: row.request_date,
                     type: 'special',
@@ -526,28 +530,18 @@ const InlineSideDishRequest = () => {
             const totalAmount = getSubmittedBatchesTotal(remainingBatches);
             let error = null;
 
-            if (remainingBatches.length === 0) {
-                const deleteResult = await supabase
-                    .from('side_dish_requests')
-                    .delete()
-                    .eq('user_id', user.id)
-                    .eq('request_date', selectedDate)
-                    .eq('period', period);
-                error = deleteResult.error;
-            } else {
-                const updateResult = await supabase
-                    .from('side_dish_requests')
-                    .update({
-                        items: remainingBatches,
-                        total_amount: totalAmount,
-                        payment_completed: true,
-                        submitted_at: remainingBatches[remainingBatches.length - 1]?.submittedAt || null
-                    })
-                    .eq('user_id', user.id)
-                    .eq('request_date', selectedDate)
-                    .eq('period', period);
-                error = updateResult.error;
-            }
+            const updateResult = await supabase
+                .from('side_dish_requests')
+                .update({
+                    items: remainingBatches,
+                    total_amount: totalAmount,
+                    payment_completed: remainingBatches.length > 0,
+                    submitted_at: remainingBatches[remainingBatches.length - 1]?.submittedAt || null
+                })
+                .eq('user_id', user.id)
+                .eq('request_date', selectedDate)
+                .eq('period', period);
+            error = updateResult.error;
 
             if (error) throw error;
 
