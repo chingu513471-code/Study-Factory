@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import EmbeddedCalendar from './EmbeddedCalendar';
@@ -126,7 +127,7 @@ const modalOverlayStyle = {
     justifyContent: 'center',
     padding: '12px',
     overflowY: 'auto',
-    zIndex: 1000
+    zIndex: 10000
 };
 
 const modalCardStyle = {
@@ -157,7 +158,7 @@ const InlineSideDishRequest = () => {
     const [mySubmittedOrders, setMySubmittedOrders] = useState(() => createEmptySubmittedOrders());
     const [submitModalPeriod, setSubmitModalPeriod] = useState('');
     const [orderHistoryModalPeriod, setOrderHistoryModalPeriod] = useState('');
-    const [cancelingPeriod, setCancelingPeriod] = useState('');
+    const [cancelingItemKey, setCancelingItemKey] = useState('');
 
     const selectedDateLabel = useMemo(() => formatPanelDateLabel(selectedDate), [selectedDate]);
     const amDeadline = useMemo(() => getDeadlineInfo('am', nowParts, selectedDate), [nowParts, selectedDate]);
@@ -472,15 +473,17 @@ const InlineSideDishRequest = () => {
         setOrderHistoryModalPeriod('');
     };
 
-    const cancelSubmittedOrder = async (period) => {
+    const cancelSubmittedOrderItem = async (period, itemIndex) => {
         const deadline = period === 'am' ? amDeadline : pmDeadline;
         const submittedOrder = mySubmittedOrders[period];
+        const orderItems = Array.isArray(submittedOrder?.items) ? submittedOrder.items : [];
+        const targetItem = orderItems[itemIndex];
 
         if (deadline.closed) {
             alert('마감시간 이후에는 주문취소가 불가능합니다.');
             return false;
         }
-        if (!submittedOrder) {
+        if (!submittedOrder || !targetItem) {
             alert('취소할 주문내역이 없습니다.');
             return false;
         }
@@ -488,31 +491,50 @@ const InlineSideDishRequest = () => {
             alert('사용자 정보를 찾을 수 없습니다. 다시 로그인해주세요.');
             return false;
         }
-        if (!window.confirm('주문을 취소하시겠습니까?')) {
+        if (!window.confirm(`${targetItem.name} 주문을 취소하시겠습니까?`)) {
             return false;
         }
 
-        setCancelingPeriod(period);
+        const itemKey = `${period}-${itemIndex}`;
+        setCancelingItemKey(itemKey);
         try {
-            const { error } = await supabase
-                .from('side_dish_requests')
-                .delete()
-                .eq('user_id', user.id)
-                .eq('request_date', selectedDate)
-                .eq('period', period);
+            const remainingItems = orderItems.filter((_, index) => index !== itemIndex);
+            const totalAmount = remainingItems.reduce((sum, item) => sum + parseAmount(item.amount), 0);
+            let error = null;
+
+            if (remainingItems.length === 0) {
+                const deleteResult = await supabase
+                    .from('side_dish_requests')
+                    .delete()
+                    .eq('user_id', user.id)
+                    .eq('request_date', selectedDate)
+                    .eq('period', period);
+                error = deleteResult.error;
+            } else {
+                const updateResult = await supabase
+                    .from('side_dish_requests')
+                    .update({
+                        items: remainingItems,
+                        total_amount: totalAmount,
+                        payment_completed: true
+                    })
+                    .eq('user_id', user.id)
+                    .eq('request_date', selectedDate)
+                    .eq('period', period);
+                error = updateResult.error;
+            }
 
             if (error) throw error;
 
-            alert(`${period === 'am' ? '점심' : '저녁'} 주문이 취소되었습니다.`);
+            alert(`${targetItem.name} 주문이 취소되었습니다.`);
             await loadSelectedDateRequests();
-            closeOrderHistoryModal();
             return true;
         } catch (error) {
             console.error('Error cancelling side dish request:', error);
             alert('주문 취소에 실패했습니다.');
             return false;
         } finally {
-            setCancelingPeriod('');
+            setCancelingItemKey('');
         }
     };
 
@@ -696,275 +718,292 @@ const InlineSideDishRequest = () => {
         ? amDeadline
         : (orderHistoryModalPeriod === 'pm' ? pmDeadline : null);
     const historyTitle = orderHistoryModalPeriod === 'am' ? '점심반찬 주문내역' : '저녁반찬 주문내역';
-    const hasHistoryOrder = Boolean(historyOrder && Array.isArray(historyOrder.items) && historyOrder.items.length > 0);
-    const canCancelHistoryOrder = Boolean(hasHistoryOrder && !historyDeadline?.closed);
+    const historyItems = Array.isArray(historyOrder?.items) ? historyOrder.items : [];
+    const hasHistoryOrder = historyItems.length > 0;
 
-    return (
-        <div style={cardStyle}>
-            <style>{'div::-webkit-scrollbar { display: none; }'}</style>
-
-            <div style={{
-                border: '1px solid #d1fae5',
-                background: 'linear-gradient(135deg, #ecfdf5 0%, #f0fdfa 100%)',
-                borderRadius: '12px',
-                padding: '12px',
-                marginBottom: '12px'
-            }}>
-                <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#0f766e', marginBottom: '8px', textAlign: 'center' }}>
-                    현재 주문중인 반찬집 : 손찬반찬백화점 센텀점
-                </div>
-                <a
-                    href={COUPANG_EATS_LINK}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                        display: 'block',
-                        width: 'calc(100% - 8px)',
-                        margin: '0 auto',
-                        boxSizing: 'border-box',
-                        textAlign: 'center',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        textDecoration: 'none',
-                        background: '#267E82',
-                        color: 'white',
-                        fontSize: '0.82rem',
-                        fontWeight: '800'
-                    }}
-                >
-                    쿠팡이츠 바로가기
-                </a>
-                <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#475569', fontWeight: '600' }}>
-                    마감시간까지 최소주문금액 15,000원 미달시, 주문취소됩니다. 개별연락 드릴게요.
-                </div>
-            </div>
-
-            <div style={{ marginBottom: '14px', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '8px' }}>
-                <EmbeddedCalendar
-                    selectedDate={selectedDate}
-                    onSelectDate={(dateStr) => {
-                        if (dateStr < todayKst) {
-                            alert('지난 날짜는 신청할 수 없습니다.');
-                            return;
-                        }
-                        setSelectedDate(dateStr);
-                    }}
-                    minDate={todayKst}
-                    compact={true}
-                    events={calendarEvents}
-                    showEvents={true}
-                    topAlignedDays={true}
-                />
-            </div>
-
-            {loading ? (
-                <div style={{ textAlign: 'center', color: '#94a3b8', marginTop: '16px' }}>불러오는 중...</div>
-            ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {renderPeriodPanel('am', '점심 반찬 신청', amDeadline, amRequest)}
-                    {renderPeriodPanel('pm', '저녁 반찬 신청', pmDeadline, pmRequest)}
-                </div>
-            )}
-
-            {submitModalPeriod && modalRequestState && (
-                <div
-                    role="dialog"
-                    aria-modal="true"
-                    style={modalOverlayStyle}
-                    onClick={closeSubmitModal}
-                >
-                    <div
-                        style={modalCardStyle}
-                        onClick={(event) => event.stopPropagation()}
+    const submitModalNode = submitModalPeriod && modalRequestState ? (
+        <div
+            role="dialog"
+            aria-modal="true"
+            style={modalOverlayStyle}
+            onClick={closeSubmitModal}
+        >
+            <div
+                style={modalCardStyle}
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <h4 style={{ margin: 0, fontSize: '1rem', color: '#0f172a', fontWeight: '900' }}>
+                        {`${selectedDateLabel} ${modalTitle}`}
+                    </h4>
+                    <button
+                        type="button"
+                        onClick={closeSubmitModal}
+                        style={{
+                            border: 'none',
+                            background: 'none',
+                            color: '#64748b',
+                            fontSize: '0.82rem',
+                            fontWeight: '800',
+                            cursor: 'pointer'
+                        }}
                     >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                            <h4 style={{ margin: 0, fontSize: '1rem', color: '#0f172a', fontWeight: '900' }}>
-                                {`${selectedDateLabel} ${modalTitle}`}
-                            </h4>
-                            <button
-                                type="button"
-                                onClick={closeSubmitModal}
-                                style={{
-                                    border: 'none',
-                                    background: 'none',
-                                    color: '#64748b',
-                                    fontSize: '0.82rem',
-                                    fontWeight: '800',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                닫기
-                            </button>
-                        </div>
+                        닫기
+                    </button>
+                </div>
 
-                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', background: '#f8fafc' }}>
-                            <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#0f172a', marginBottom: '8px' }}>
-                                1. 주문내용 확인
-                            </div>
-                            {modalCleanItems.length === 0 ? (
-                                <div style={{ fontSize: '0.81rem', color: '#94a3b8', marginBottom: '6px' }}>
-                                    반찬을 한 개 이상 추가해주세요.
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', background: '#f8fafc' }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#0f172a', marginBottom: '8px' }}>
+                        1. 주문내용 확인
+                    </div>
+                    {modalCleanItems.length === 0 ? (
+                        <div style={{ fontSize: '0.81rem', color: '#94a3b8', marginBottom: '6px' }}>
+                            반찬을 한 개 이상 추가해주세요.
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+                            {modalCleanItems.map((item, index) => (
+                                <div key={`${item.name}-${index}`} style={{ fontSize: '0.82rem', color: '#334155', fontWeight: '700' }}>
+                                    {`${index + 1}. ${item.name} ${formatAmount(item.amount)}`}
                                 </div>
-                            ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
-                                    {modalCleanItems.map((item, index) => (
-                                        <div key={`${item.name}-${index}`} style={{ fontSize: '0.82rem', color: '#334155', fontWeight: '700' }}>
-                                            {`${index + 1}. ${item.name} ${formatAmount(item.amount)}`}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                            <div style={{ fontSize: '0.87rem', color: '#0f172a', fontWeight: '900' }}>
-                                총 {formatAmount(modalTotalAmount)}
-                            </div>
+                            ))}
                         </div>
-
-                        <div style={{ marginTop: '10px', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', background: '#f8fafc' }}>
-                            <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#0f172a', marginBottom: '8px' }}>
-                                2. 계좌이체
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: '#475569', fontWeight: '700', lineHeight: 1.5 }}>
-                                사장님 카카오페이 또는 신한은행 계좌로 송금해주세요
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: '#0f172a', fontWeight: '800', marginTop: '5px' }}>
-                                카카오페이: 사장님 카카오페이
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: '#0f172a', fontWeight: '800', marginTop: '2px' }}>
-                                계좌정보: {ACCOUNT_TRANSFER_INFO}
-                            </div>
-                            <label style={{ marginTop: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', color: '#334155', fontWeight: '800' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={modalRequestState.paymentCompleted}
-                                    onChange={(event) => {
-                                        const checked = event.target.checked;
-                                        setPeriodState(submitModalPeriod, (prev) => ({ ...prev, paymentCompleted: checked }));
-                                    }}
-                                    style={{ width: '15px', height: '15px', cursor: 'pointer' }}
-                                />
-                                송금완료
-                            </label>
-                        </div>
-
-                        <div style={{ marginTop: '10px', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', background: '#f8fafc' }}>
-                            <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#0f172a', marginBottom: '8px' }}>
-                                3. 신청하기
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: '#475569', fontWeight: '700', lineHeight: 1.5 }}>
-                                주문내용 확인 및 송금을 완료하셨으면 아래 신청 버튼을 눌러서 신청을 완료해주세요
-                            </div>
-                            <button
-                                type="button"
-                                onClick={submitFromModal}
-                                disabled={savingPeriod === submitModalPeriod || modalDeadline?.closed}
-                                style={{
-                                    marginTop: '10px',
-                                    width: '100%',
-                                    padding: '10px 0',
-                                    borderRadius: '9px',
-                                    border: 'none',
-                                    background: modalDeadline?.closed ? '#d1d5db' : '#267E82',
-                                    color: 'white',
-                                    fontSize: '0.84rem',
-                                    fontWeight: '800',
-                                    cursor: modalDeadline?.closed ? 'not-allowed' : (savingPeriod === submitModalPeriod ? 'wait' : 'pointer')
-                                }}
-                            >
-                                {savingPeriod === submitModalPeriod ? '신청 중...' : '신청하기'}
-                            </button>
-                        </div>
+                    )}
+                    <div style={{ fontSize: '0.87rem', color: '#0f172a', fontWeight: '900' }}>
+                        총 {formatAmount(modalTotalAmount)}
                     </div>
                 </div>
-            )}
 
-            {orderHistoryModalPeriod && (
-                <div
-                    role="dialog"
-                    aria-modal="true"
-                    style={modalOverlayStyle}
-                    onClick={closeOrderHistoryModal}
-                >
-                    <div
-                        style={modalCardStyle}
-                        onClick={(event) => event.stopPropagation()}
+                <div style={{ marginTop: '10px', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', background: '#f8fafc' }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#0f172a', marginBottom: '8px' }}>
+                        2. 계좌이체
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#475569', fontWeight: '700', lineHeight: 1.5 }}>
+                        사장님 카카오페이 또는 신한은행 계좌로 송금해주세요
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#0f172a', fontWeight: '800', marginTop: '5px' }}>
+                        카카오페이: 사장님 카카오페이
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#0f172a', fontWeight: '800', marginTop: '2px' }}>
+                        계좌정보: {ACCOUNT_TRANSFER_INFO}
+                    </div>
+                    <label style={{ marginTop: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', color: '#334155', fontWeight: '800' }}>
+                        <input
+                            type="checkbox"
+                            checked={modalRequestState.paymentCompleted}
+                            onChange={(event) => {
+                                const checked = event.target.checked;
+                                setPeriodState(submitModalPeriod, (prev) => ({ ...prev, paymentCompleted: checked }));
+                            }}
+                            style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                        />
+                        송금완료
+                    </label>
+                </div>
+
+                <div style={{ marginTop: '10px', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', background: '#f8fafc' }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#0f172a', marginBottom: '8px' }}>
+                        3. 신청하기
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#475569', fontWeight: '700', lineHeight: 1.5 }}>
+                        주문내용 확인 및 송금을 완료하셨으면 아래 신청 버튼을 눌러서 신청을 완료해주세요
+                    </div>
+                    <button
+                        type="button"
+                        onClick={submitFromModal}
+                        disabled={savingPeriod === submitModalPeriod || modalDeadline?.closed}
+                        style={{
+                            marginTop: '10px',
+                            width: '100%',
+                            padding: '10px 0',
+                            borderRadius: '9px',
+                            border: 'none',
+                            background: modalDeadline?.closed ? '#d1d5db' : '#267E82',
+                            color: 'white',
+                            fontSize: '0.84rem',
+                            fontWeight: '800',
+                            cursor: modalDeadline?.closed ? 'not-allowed' : (savingPeriod === submitModalPeriod ? 'wait' : 'pointer')
+                        }}
                     >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                            <h4 style={{ margin: 0, fontSize: '1rem', color: '#0f172a', fontWeight: '900' }}>
-                                {`${selectedDateLabel} ${historyTitle}`}
-                            </h4>
-                            <button
-                                type="button"
-                                onClick={closeOrderHistoryModal}
-                                style={{
-                                    border: 'none',
-                                    background: 'none',
-                                    color: '#64748b',
-                                    fontSize: '0.82rem',
-                                    fontWeight: '800',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                닫기
-                            </button>
-                        </div>
+                        {savingPeriod === submitModalPeriod ? '신청 중...' : '신청하기'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    ) : null;
 
-                        {!hasHistoryOrder ? (
-                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', background: '#f8fafc', fontSize: '0.82rem', color: '#64748b', fontWeight: '700' }}>
-                                주문내역이 없습니다.
+    const orderHistoryModalNode = orderHistoryModalPeriod ? (
+        <div
+            role="dialog"
+            aria-modal="true"
+            style={modalOverlayStyle}
+            onClick={closeOrderHistoryModal}
+        >
+            <div
+                style={modalCardStyle}
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <h4 style={{ margin: 0, fontSize: '1rem', color: '#0f172a', fontWeight: '900' }}>
+                        {`${selectedDateLabel} ${historyTitle}`}
+                    </h4>
+                    <button
+                        type="button"
+                        onClick={closeOrderHistoryModal}
+                        style={{
+                            border: 'none',
+                            background: 'none',
+                            color: '#64748b',
+                            fontSize: '0.82rem',
+                            fontWeight: '800',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        닫기
+                    </button>
+                </div>
+
+                {!hasHistoryOrder ? (
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', background: '#f8fafc', fontSize: '0.82rem', color: '#64748b', fontWeight: '700' }}>
+                        주문내역이 없습니다.
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', background: '#f8fafc' }}>
+                            <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#0f172a', marginBottom: '8px' }}>
+                                주문내용
                             </div>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', background: '#f8fafc' }}>
-                                    <div style={{ fontSize: '0.88rem', fontWeight: '900', color: '#0f172a', marginBottom: '8px' }}>
-                                        주문내용
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
-                                        {historyOrder.items.map((item, index) => (
-                                            <div key={`${item.name}-${index}`} style={{ fontSize: '0.82rem', color: '#334155', fontWeight: '700' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+                                {historyItems.map((item, index) => {
+                                    const itemCancelKey = `${orderHistoryModalPeriod}-${index}`;
+                                    return (
+                                        <div key={`${item.name}-${index}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                            <div style={{ flex: 1, fontSize: '0.82rem', color: '#334155', fontWeight: '700' }}>
                                                 {`${index + 1}. ${item.name} ${formatAmount(item.amount)}`}
                                             </div>
-                                        ))}
-                                    </div>
-                                    <div style={{ fontSize: '0.87rem', color: '#0f172a', fontWeight: '900' }}>
-                                        총 {formatAmount(historyOrder.totalAmount)}
-                                    </div>
-                                    {historyOrder.submittedAt && (
-                                        <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#64748b', fontWeight: '700' }}>
-                                            신청시간: {formatSubmittedAt(historyOrder.submittedAt)}
+                                            <button
+                                                type="button"
+                                                onClick={() => cancelSubmittedOrderItem(orderHistoryModalPeriod, index)}
+                                                disabled={historyDeadline?.closed || cancelingItemKey === itemCancelKey}
+                                                style={{
+                                                    border: 'none',
+                                                    borderRadius: '7px',
+                                                    background: historyDeadline?.closed ? '#d1d5db' : '#ef4444',
+                                                    color: 'white',
+                                                    fontSize: '0.74rem',
+                                                    fontWeight: '800',
+                                                    padding: '5px 8px',
+                                                    cursor: historyDeadline?.closed ? 'not-allowed' : (cancelingItemKey === itemCancelKey ? 'wait' : 'pointer'),
+                                                    whiteSpace: 'nowrap'
+                                                }}
+                                            >
+                                                {cancelingItemKey === itemCancelKey ? '취소 중...' : '취소'}
+                                            </button>
                                         </div>
-                                    )}
+                                    );
+                                })}
+                            </div>
+                            <div style={{ fontSize: '0.87rem', color: '#0f172a', fontWeight: '900' }}>
+                                총 {formatAmount(historyOrder.totalAmount)}
+                            </div>
+                            {historyOrder.submittedAt && (
+                                <div style={{ marginTop: '6px', fontSize: '0.74rem', color: '#64748b', fontWeight: '700' }}>
+                                    신청시간: {formatSubmittedAt(historyOrder.submittedAt)}
                                 </div>
+                            )}
+                        </div>
 
-                                {historyDeadline?.closed && (
-                                    <div style={{ fontSize: '0.78rem', color: '#dc2626', fontWeight: '700' }}>
-                                        마감시간 이후에는 주문취소가 불가능합니다.
-                                    </div>
-                                )}
-
-                                <button
-                                    type="button"
-                                    onClick={() => cancelSubmittedOrder(orderHistoryModalPeriod)}
-                                    disabled={!canCancelHistoryOrder || cancelingPeriod === orderHistoryModalPeriod}
-                                    style={{
-                                        width: '100%',
-                                        padding: '10px 0',
-                                        borderRadius: '9px',
-                                        border: 'none',
-                                        background: canCancelHistoryOrder ? '#ef4444' : '#d1d5db',
-                                        color: 'white',
-                                        fontSize: '0.84rem',
-                                        fontWeight: '800',
-                                        cursor: (!canCancelHistoryOrder || cancelingPeriod === orderHistoryModalPeriod) ? 'not-allowed' : 'pointer'
-                                    }}
-                                >
-                                    {cancelingPeriod === orderHistoryModalPeriod ? '취소 처리 중...' : '주문취소'}
-                                </button>
+                        {historyDeadline?.closed && (
+                            <div style={{ fontSize: '0.78rem', color: '#dc2626', fontWeight: '700' }}>
+                                마감시간 이후에는 주문취소가 불가능합니다.
                             </div>
                         )}
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
+    ) : null;
+
+    const portalNode = typeof document !== 'undefined'
+        ? createPortal(
+            <>
+                {submitModalNode}
+                {orderHistoryModalNode}
+            </>,
+            document.body
+        )
+        : null;
+
+    return (
+        <>
+            <div style={cardStyle}>
+                <style>{'div::-webkit-scrollbar { display: none; }'}</style>
+
+                <div style={{
+                    border: '1px solid #d1fae5',
+                    background: 'linear-gradient(135deg, #ecfdf5 0%, #f0fdfa 100%)',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    marginBottom: '12px'
+                }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#0f766e', marginBottom: '8px', textAlign: 'center' }}>
+                        현재 주문중인 반찬집 : 손찬반찬백화점 센텀점
+                    </div>
+                    <a
+                        href={COUPANG_EATS_LINK}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                            display: 'block',
+                            width: 'calc(100% - 8px)',
+                            margin: '0 auto',
+                            boxSizing: 'border-box',
+                            textAlign: 'center',
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            textDecoration: 'none',
+                            background: '#267E82',
+                            color: 'white',
+                            fontSize: '0.82rem',
+                            fontWeight: '800'
+                        }}
+                    >
+                        쿠팡이츠 바로가기
+                    </a>
+                    <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#475569', fontWeight: '600' }}>
+                        마감시간까지 최소주문금액 15,000원 미달시, 주문취소됩니다. 개별연락 드릴게요.
+                    </div>
+                </div>
+
+                <div style={{ marginBottom: '14px', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '8px' }}>
+                    <EmbeddedCalendar
+                        selectedDate={selectedDate}
+                        onSelectDate={(dateStr) => {
+                            if (dateStr < todayKst) {
+                                alert('지난 날짜는 신청할 수 없습니다.');
+                                return;
+                            }
+                            setSelectedDate(dateStr);
+                        }}
+                        minDate={todayKst}
+                        compact={true}
+                        events={calendarEvents}
+                        showEvents={true}
+                        topAlignedDays={true}
+                    />
+                </div>
+
+                {loading ? (
+                    <div style={{ textAlign: 'center', color: '#94a3b8', marginTop: '16px' }}>불러오는 중...</div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {renderPeriodPanel('am', '점심 반찬 신청', amDeadline, amRequest)}
+                        {renderPeriodPanel('pm', '저녁 반찬 신청', pmDeadline, pmRequest)}
+                    </div>
+                )}
+            </div>
+            {portalNode}
+        </>
     );
 };
 
