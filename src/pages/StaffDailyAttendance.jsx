@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, X, Plus, Search, UserPlus, CheckSquare, Square, Trash, Save, CornerDownLeft } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
@@ -116,21 +116,21 @@ const shiftYmdByDays = (ymd, days) => {
 
 const formatNewBeverage2Text = (row) => {
     if (!row) return '-';
-    if (row.beverage_2_choice === '안먹음') return '안먹음';
+    if (row.beverage_2_choice === '없음') return '없음';
 
-    let beverage2 = row.beverage_2_choice === '기타'
-        ? (row.beverage_2_custom || '기타')
+    let beverage2 = row.beverage_2_choice === '湲고?'
+        ? (row.beverage_2_custom || '湲고?')
         : row.beverage_2_choice;
 
     if (row.use_personal_tumbler) {
-        beverage2 = `텀블러 ${beverage2}`;
+        beverage2 = `?釉붾윭 ${beverage2}`;
     }
 
     return beverage2;
 };
 
 const VACATION_STATUS_KEYS = ['vacation_full', 'vacation_half_am', 'vacation_half_pm', 'vacation_cancel'];
-const POPUP_PRESET_REASONS = ['지각', '늦잠', '쉼', '운동', '시험', '아픔'];
+const POPUP_PRESET_REASONS = ['지각', '조퇴', '외출', '이동', '시험', '컨디션'];
 
 // Status Selection Popup
 const StatusPopup = ({
@@ -183,11 +183,11 @@ const StatusPopup = ({
                 }}
             >
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2d3748', marginBottom: '15px', textAlign: 'center' }}>
-                    {user?.name || ''} 출석 상태 선택
+                    {user?.name || ''} 異쒖꽍 ?곹깭 ?좏깮
                 </h3>
 
                 <div style={{ marginBottom: '12px' }}>
-                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#4a5568' }}>날짜</label>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#4a5568' }}>?좎쭨</label>
                     <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px' }}>
                         <EmbeddedCalendar
                             selectedDates={selectedDates}
@@ -199,14 +199,14 @@ const StatusPopup = ({
                         />
                     </div>
                     <div style={{ textAlign: 'center', marginTop: '6px', color: '#718096', fontSize: '0.82rem' }}>
-                        {selectedDates.length > 0 ? `${selectedDates.length}일 선택됨` : '날짜를 선택하세요 (다중 선택 가능)'}
+                        {selectedDates.length > 0 ? `${selectedDates.length}개 선택됨` : '날짜를 선택하세요(여러 날짜 선택 가능)'}
                     </div>
                 </div>
 
                 <div style={{ margin: '15px 0', borderTop: '1px solid #e2e8f0' }}></div>
 
                 <div style={{ marginBottom: '14px' }}>
-                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#4a5568' }}>교시</label>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#4a5568' }}>援먯떆</label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
                         {[1, 2, 3, 4, 5, 6, 7].map((p) => (
                             <button
@@ -240,7 +240,7 @@ const StatusPopup = ({
                                 cursor: 'pointer'
                             }}
                         >
-                            전체 선택
+                            ?꾩껜 ?좏깮
                         </button>
                     </div>
                 </div>
@@ -248,7 +248,7 @@ const StatusPopup = ({
                 <div style={{ margin: '15px 0', borderTop: '1px solid #e2e8f0' }}></div>
 
                 <div style={{ marginBottom: '12px' }}>
-                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#4a5568' }}>사유 선택</label>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#4a5568' }}>?ъ쑀 ?좏깮</label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
                         {POPUP_PRESET_REASONS.map((reason) => (
                             <button
@@ -272,12 +272,12 @@ const StatusPopup = ({
                 </div>
 
                 <div style={{ marginBottom: '15px' }}>
-                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#4a5568' }}>사유 입력</label>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#4a5568' }}>?ъ쑀 ?낅젰</label>
                     <input
                         type="text"
                         value={customReason}
                         onChange={(e) => onCustomReasonChange(e.target.value)}
-                        placeholder="3글자 이하 권장"
+                        placeholder="3湲???댄븯 沅뚯옣"
                         style={{
                             width: '100%',
                             padding: '10px',
@@ -302,7 +302,7 @@ const StatusPopup = ({
                             cursor: 'pointer'
                         }}
                     >
-                        월차
+                        ?붿감
                     </button>
                     <button
                         onClick={() => onReasonSelect('vacation_half_am')}
@@ -314,7 +314,7 @@ const StatusPopup = ({
                             cursor: 'pointer'
                         }}
                     >
-                        오전반차
+                        ?ㅼ쟾諛섏감
                     </button>
                     <button
                         onClick={() => onReasonSelect('vacation_half_pm')}
@@ -326,7 +326,7 @@ const StatusPopup = ({
                             cursor: 'pointer'
                         }}
                     >
-                        오후반차
+                        ?ㅽ썑諛섏감
                     </button>
                 </div>
 
@@ -342,7 +342,7 @@ const StatusPopup = ({
                         cursor: 'pointer'
                     }}
                 >
-                    휴가취소
+                    ?닿?痍⑥냼
                 </button>
 
                 <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
@@ -354,7 +354,7 @@ const StatusPopup = ({
                             fontWeight: 'bold', fontSize: '0.95rem', cursor: 'pointer'
                         }}
                     >
-                        신청
+                        ?좎껌
                     </button>
                     <button
                         onClick={onFixedSubmit}
@@ -364,7 +364,7 @@ const StatusPopup = ({
                             fontWeight: 'bold', fontSize: '0.95rem', cursor: 'pointer'
                         }}
                     >
-                        고정신청
+                        怨좎젙?좎껌
                     </button>
                 </div>
 
@@ -376,7 +376,7 @@ const StatusPopup = ({
                         fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer'
                     }}
                 >
-                    닫기
+                    ?リ린
                 </button>
             </div>
         </div >,
@@ -412,17 +412,17 @@ const AttendanceCell = React.memo(({ user, dateStr, period, isRowHighlighted, is
         if (vac.type === 'full') {
             bg = '#c6f6d5';
             color = '#22543d';
-            content = vac.reason ? `월차` : '월차';
+            content = vac.reason ? `?붿감` : '?붿감';
         } else if (vac.type === 'half') {
             const isAm = (vac.periods || []).includes(1);
             if (isAm && period <= 4) {
                 bg = '#c6f6d5';
                 color = '#22543d';
-                content = '오전';
+                content = '?ㅼ쟾';
             } else if (!isAm && period >= 4) {
                 bg = '#c6f6d5';
                 color = '#22543d';
-                content = '오후';
+                content = '?ㅽ썑';
             }
         } else if (vac.type === 'special') {
             const vacPeriods = Array.isArray(vac.periods) ? vac.periods : [];
@@ -431,7 +431,7 @@ const AttendanceCell = React.memo(({ user, dateStr, period, isRowHighlighted, is
             if (appliesThisPeriod) {
                 bg = '#c6f6d5';
                 color = '#c53030';
-                content = vac.reason || '특휴';
+                content = vac.reason || '?뱁쑕';
             }
         }
     }
@@ -580,10 +580,10 @@ const UserMemoPopup = ({ user, memberMemos, onSave, onClose }) => {
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2d3748' }}>
-                        {user.name} <span style={{ fontSize: '0.9rem', color: '#718096', fontWeight: 'normal' }}>(좌석 {user.seat_number || '-'})</span>
+                        {user.name} <span style={{ fontSize: '0.9rem', color: '#718096', fontWeight: 'normal' }}>(醫뚯꽍 {user.seat_number || '-'})</span>
                     </span>
                     <span style={{ fontSize: '0.9rem', color: '#4a5568', background: '#edf2f7', padding: '2px 8px', borderRadius: '4px' }}>
-                        참고사항
+                        李멸퀬?ы빆
                     </span>
                 </div>
                 <button
@@ -606,7 +606,7 @@ const UserMemoPopup = ({ user, memberMemos, onSave, onClose }) => {
                 <textarea
                     value={text}
                     onChange={e => setText(e.target.value)}
-                    placeholder="참고사항을 입력하세요..."
+                    placeholder="李멸퀬?ы빆???낅젰?섏꽭??.."
                     style={{
                         flex: 1,
                         width: '100%',
@@ -632,7 +632,7 @@ const UserMemoPopup = ({ user, memberMemos, onSave, onClose }) => {
                         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                     }}
                 >
-                    <Save size={18} /> 저장
+                    <Save size={18} /> ???
                 </button>
             </div>
         </div>
@@ -723,7 +723,7 @@ const IncomingEmployeeModal = ({ onClose }) => {
             await fetchPendingEmployees();
         } catch (error) {
             console.error('Error toggling todo:', error);
-            alert('투두 업데이트 실패');
+            alert('?щ몢 ?낅뜲?댄듃 ?ㅽ뙣');
         }
     };
 
@@ -772,12 +772,12 @@ const IncomingEmployeeModal = ({ onClose }) => {
             await fetchPendingEmployees();
         } catch (error) {
             console.error('Error saving edit:', error);
-            alert('수정 실패');
+            alert('?섏젙 ?ㅽ뙣');
         }
     };
 
     const deletePending = async (id) => {
-        if (!confirm('삭제하시겠습니까?')) return;
+        if (!confirm('??젣?섏떆寃좎뒿?덇퉴?')) return;
         try {
             const { error } = await supabase
                 .from('pending_registrations')
@@ -788,7 +788,7 @@ const IncomingEmployeeModal = ({ onClose }) => {
             await fetchPendingEmployees();
         } catch (error) {
             console.error('Error deleting:', error);
-            alert('삭제 실패');
+            alert('??젣 ?ㅽ뙣');
         }
     };
 
@@ -805,18 +805,18 @@ const IncomingEmployeeModal = ({ onClose }) => {
             }}>
                 <div style={{ padding: '20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#267E82', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <UserPlus size={24} /> 입사예정자 관리
+                        <UserPlus size={24} /> ?낆궗?덉젙??愿由?
                     </h3>
                     <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} color="#a0aec0" /></button>
                 </div>
 
                 <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
                     {loading ? (
-                        <div style={{ textAlign: 'center', color: '#a0aec0', marginTop: '40px' }}>로딩중...</div>
+                        <div style={{ textAlign: 'center', color: '#a0aec0', marginTop: '40px' }}>濡쒕뵫以?..</div>
                     ) : pendingEmployees.length === 0 ? (
                         <div style={{ textAlign: 'center', color: '#a0aec0', marginTop: '40px' }}>
-                            입사예정자가 없습니다.<br />
-                            <span style={{ fontSize: '0.85rem' }}>관리자 페이지에서 사원 등록 시 자동으로 추가됩니다.</span>
+                            ?낆궗?덉젙?먭? ?놁뒿?덈떎.<br />
+                            <span style={{ fontSize: '0.85rem' }}>愿由ъ옄 ?섏씠吏?먯꽌 ?ъ썝 ?깅줉 ???먮룞?쇰줈 異붽??⑸땲??</span>
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -837,19 +837,19 @@ const IncomingEmployeeModal = ({ onClose }) => {
                                             // Edit Mode
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                                                    <span style={{ fontWeight: 'bold', fontSize: '1rem' }}>수정</span>
+                                                    <span style={{ fontWeight: 'bold', fontSize: '1rem' }}>?섏젙</span>
                                                     <div style={{ display: 'flex', gap: '5px' }}>
                                                         <button onClick={() => saveEdit(emp.id)} style={{ padding: '6px 10px', background: '#38a169', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>저장</button>
-                                                        <button onClick={() => { setEditingId(null); setEditForm({}); }} style={{ padding: '6px 10px', background: '#e2e8f0', color: '#4a5568', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>취소</button>
+                                                        <button onClick={() => { setEditingId(null); setEditForm({}); }} style={{ padding: '6px 10px', background: '#e2e8f0', color: '#4a5568', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>痍⑥냼</button>
                                                     </div>
                                                 </div>
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                                     <div>
-                                                        <label style={{ fontSize: '0.75rem', color: '#718096', display: 'block', marginBottom: '3px' }}>이름</label>
+                                                        <label style={{ fontSize: '0.75rem', color: '#718096', display: 'block', marginBottom: '3px' }}>?대쫫</label>
                                                         <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '0.9rem' }} />
                                                     </div>
                                                     <div>
-                                                        <label style={{ fontSize: '0.75rem', color: '#718096', display: 'block', marginBottom: '3px' }}>좌석</label>
+                                                        <label style={{ fontSize: '0.75rem', color: '#718096', display: 'block', marginBottom: '3px' }}>醫뚯꽍</label>
                                                         <input type="number" value={editForm.seat_number} onChange={(e) => setEditForm({ ...editForm, seat_number: e.target.value })} style={{ width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '0.9rem' }} />
                                                     </div>
                                                     <div>
@@ -872,7 +872,7 @@ const IncomingEmployeeModal = ({ onClose }) => {
                                                         </div>
                                                         {emp.expected_start_date && (
                                                             <div style={{ fontSize: '0.85rem', color: '#718096', marginTop: '2px' }}>
-                                                                입사예정: {format(new Date(emp.expected_start_date), 'M월 d일 (EEE)', { locale: ko })}
+                                                                입사예정: {format(new Date(emp.expected_start_date), 'M월 d일(EEE)', { locale: ko })}
                                                             </div>
                                                         )}
                                                     </div>
@@ -1084,7 +1084,7 @@ const StaffDailyAttendance = ({ onBack }) => {
     const sortedMemberSuggestions = useMemo(() => {
         return [...memberSuggestions]
             .filter((suggestion) => {
-                if (branch === '전체') return true;
+                if (branch === '?꾩껜') return true;
                 return suggestion.branch === branch;
             })
             .filter((suggestion) => {
@@ -1416,7 +1416,7 @@ const StaffDailyAttendance = ({ onBack }) => {
             });
             for (let i = 1; i <= MAX_SEATS; i++) {
                 if (userMap[i]) fullRows.push(userMap[i]);
-                else fullRows.push({ id: `empty_${i}`, seat_number: i, name: '공석', isEmpty: true });
+                else fullRows.push({ id: `empty_${i}`, seat_number: i, name: '怨듭꽍', isEmpty: true });
             }
             unassignedUsers.forEach(u => fullRows.push({ ...u, isUnassigned: true, seat_number: null }));
             setDisplayRows(fullRows);
@@ -1535,11 +1535,11 @@ const StaffDailyAttendance = ({ onBack }) => {
             const systemIncomingMemos = enrichedIncomingEmployees
                 .filter((emp) => emp.expected_start_date === dateStr)
                 .map((emp) => {
-                    const seatText = emp.seat_number ? `${emp.seat_number}번 ` : '';
+                    const seatText = emp.seat_number ? `${emp.seat_number}踰?` : '';
 
                     return {
                         id: `incoming_${emp.id}_${dateStr}`,
-                        content: `신규 ${seatText}${emp.name}(${emp.plaqueText}) ${emp.beverageText}`.trim(),
+                        content: `?좉퇋 ${seatText}${emp.name}(${emp.plaqueText}) ${emp.beverageText}`.trim(),
                         isSystemIncoming: true
                     };
                 });
@@ -1563,7 +1563,7 @@ const StaffDailyAttendance = ({ onBack }) => {
                     const isChangedToday = updatedDisplayDate === dateStr && (createdDisplayDate !== dateStr || Math.abs(updatedAtMs - createdAtMs) > 1000);
                     const actionText = isChangedToday ? '변경' : '새로 신청';
 
-                    const seatText = row.requester?.seat_number ? `${row.requester.seat_number}번 ` : '';
+                    const seatText = row.requester?.seat_number ? `${row.requester.seat_number}번` : '';
                     const nameText = row.requester?.name || '회원';
                     const beverage2Text = formatNewBeverage2Text(row);
                     const eventTime = updatedAtMs || createdAtMs || 0;
@@ -1589,8 +1589,8 @@ const StaffDailyAttendance = ({ onBack }) => {
                     status: suggestion.status === 'resolved' ? 'completed' : 'pending',
                     created_at: suggestion.created_at,
                     resolved_at: suggestion.resolved_at,
-                    authorName: suggestion.author?.name || '익명',
-                    branch: suggestion.author?.branch || '알수없음',
+                    authorName: suggestion.author?.name || '?듬챸',
+                    branch: suggestion.author?.branch || '?뚯닔?놁쓬',
                     completerName: suggestion.completer?.name || null
                 };
             });
@@ -1710,7 +1710,7 @@ const StaffDailyAttendance = ({ onBack }) => {
         const currentStatus = targetKey ? statusData[targetKey] : null;
 
         if (targetKey && period && currentStatus) {
-            const message = `${user.name}의 ${formatYmdToKorean(targetDate)} ${period}교시 '${currentStatus}' 기타휴무를 취소하시겠습니까?`;
+            const message = `${user.name}??${formatYmdToKorean(targetDate)} ${period}援먯떆 '${currentStatus}' 湲고??대Т瑜?痍⑥냼?섏떆寃좎뒿?덇퉴?`;
             if (!confirm(message)) return;
 
             try {
@@ -1751,7 +1751,7 @@ const StaffDailyAttendance = ({ onBack }) => {
                 fetchData();
             } catch (e) {
                 console.error(e);
-                alert(`기타휴무 취소에 실패했습니다: ${e.message}`);
+                alert(`湲고??대Т 痍⑥냼???ㅽ뙣?덉뒿?덈떎: ${e.message}`);
                 fetchData();
             }
             return;
@@ -1759,11 +1759,11 @@ const StaffDailyAttendance = ({ onBack }) => {
 
         const targetDates = Array.from(new Set(selectedDates)).sort();
         if (targetDates.length === 0) {
-            alert('취소할 날짜를 선택해주세요.');
+            alert('痍⑥냼???좎쭨瑜??좏깮?댁＜?몄슂.');
             return;
         }
 
-        if (!confirm(`${user.name}님의 휴가를 취소하시겠습니까?\n날짜: ${targetDates.join(', ')}`)) return;
+        if (!confirm(`${user.name}?섏쓽 ?닿?瑜?痍⑥냼?섏떆寃좎뒿?덇퉴?\n?좎쭨: ${targetDates.join(', ')}`)) return;
 
         try {
             const { count, error } = await supabase
@@ -1775,7 +1775,7 @@ const StaffDailyAttendance = ({ onBack }) => {
 
             if (error) throw error;
             if (!count) {
-                alert('삭제된 휴가가 없습니다. 이미 삭제되었거나 권한이 없을 수 있습니다.');
+                alert('??젣???닿?媛 ?놁뒿?덈떎. ?대? ??젣?섏뿀嫄곕굹 沅뚰븳???놁쓣 ???덉뒿?덈떎.');
                 return;
             }
 
@@ -1792,7 +1792,7 @@ const StaffDailyAttendance = ({ onBack }) => {
             fetchData();
         } catch (e) {
             console.error('Error canceling vacation:', e);
-            alert(`휴가 취소에 실패했습니다: ${e.message}`);
+            alert(`?닿? 痍⑥냼???ㅽ뙣?덉뒿?덈떎: ${e.message}`);
             fetchData();
         }
     };
@@ -1801,7 +1801,7 @@ const StaffDailyAttendance = ({ onBack }) => {
         const { customReason } = statusPopup;
         const trimmed = customReason.trim();
         if (!trimmed) {
-            alert('사유를 입력해주세요.');
+            alert('?ъ쑀瑜??낅젰?댁＜?몄슂.');
             return null;
         }
         return trimmed;
@@ -1859,13 +1859,13 @@ const StaffDailyAttendance = ({ onBack }) => {
 
         const targetDates = Array.from(new Set(selectedDates)).sort();
         if (targetDates.length === 0) {
-            alert('날짜를 선택해주세요.');
+            alert('?좎쭨瑜??좏깮?댁＜?몄슂.');
             return;
         }
 
         const isVacationAction = VACATION_STATUS_KEYS.includes(selectedReason);
         if (!isVacationAction && selectedPeriods.length === 0) {
-            alert('교시를 선택해주세요.');
+            alert('援먯떆瑜??좏깮?댁＜?몄슂.');
             return;
         }
 
@@ -1881,7 +1881,7 @@ const StaffDailyAttendance = ({ onBack }) => {
 
                     if (error) throw error;
                     if (!count) {
-                        alert('삭제된 휴가가 없습니다. 이미 삭제되었거나 권한이 없을 수 있습니다.');
+                        alert('??젣???닿?媛 ?놁뒿?덈떎. ?대? ??젣?섏뿀嫄곕굹 沅뚰븳???놁쓣 ???덉뒿?덈떎.');
                     } else {
                         setVacationData(prev => {
                             const next = { ...prev };
@@ -1890,7 +1890,7 @@ const StaffDailyAttendance = ({ onBack }) => {
                             });
                             return next;
                         });
-                        alert('휴가가 취소되었습니다.');
+                        alert('?닿?媛 痍⑥냼?섏뿀?듬땲??');
                     }
                 } else {
                     let type = 'full';
@@ -1924,7 +1924,7 @@ const StaffDailyAttendance = ({ onBack }) => {
                 }
             } catch (e) {
                 console.error('Error creating vacation:', e);
-                alert(`휴가 등록에 실패했습니다: ${e.message}`);
+                alert(`?닿? ?깅줉???ㅽ뙣?덉뒿?덈떎: ${e.message}`);
                 fetchData();
                 return;
             }
@@ -1956,7 +1956,7 @@ const StaffDailyAttendance = ({ onBack }) => {
             if (error) throw error;
         } catch (e) {
             console.error(e);
-            alert(`기타휴가 신청에 실패했습니다: ${e.message}`);
+            alert(`湲고??닿? ?좎껌???ㅽ뙣?덉뒿?덈떎: ${e.message}`);
             fetchData();
             return;
         }
@@ -1989,15 +1989,15 @@ const StaffDailyAttendance = ({ onBack }) => {
 
         const targetDates = Array.from(new Set(selectedDates)).sort();
         if (targetDates.length === 0) {
-            alert('날짜를 선택해주세요.');
+            alert('?좎쭨瑜??좏깮?댁＜?몄슂.');
             return;
         }
         if (selectedPeriods.length === 0) {
-            alert('교시를 선택해주세요.');
+            alert('援먯떆瑜??좏깮?댁＜?몄슂.');
             return;
         }
         if (VACATION_STATUS_KEYS.includes(selectedReason)) {
-            alert('고정신청은 사유입력으로만 가능합니다.');
+            alert('怨좎젙?좎껌? ?ъ쑀?낅젰?쇰줈留?媛?ν빀?덈떎.');
             return;
         }
 
@@ -2015,10 +2015,10 @@ const StaffDailyAttendance = ({ onBack }) => {
             .map((d) => dayNames[d])
             .join(', ');
 
-        const msg = `${user.name}님의 [매주 고정 일정]을 등록하시겠습니까?\n\n` +
-            `요일: ${selectedDayNames}\n` +
-            `사유: ${finalReason}\n` +
-            `교시: ${periodsToApply.join(', ')}`;
+        const msg = `${user.name}?섏쓽 [留ㅼ＜ 怨좎젙 ?쇱젙]???깅줉?섏떆寃좎뒿?덇퉴?\n\n` +
+            `?붿씪: ${selectedDayNames}\n` +
+            `?ъ쑀: ${finalReason}\n` +
+            `援먯떆: ${periodsToApply.join(', ')}`;
 
         if (!confirm(msg)) return;
 
@@ -2068,13 +2068,13 @@ const StaffDailyAttendance = ({ onBack }) => {
                 return next;
             });
 
-            alert('매주 고정 일정이 등록되었고, 선택한 날짜에는 즉시 반영되었습니다.\n[고정 기타 휴무 관리] 메뉴에서 확인할 수 있으며, 매주 월요일 00:00 (KST)에 자동 반영됩니다.');
+            alert('留ㅼ＜ 怨좎젙 ?쇱젙???깅줉?섏뿀怨? ?좏깮???좎쭨?먮뒗 利됱떆 諛섏쁺?섏뿀?듬땲??\n[怨좎젙 湲고? ?대Т 愿由? 硫붾돱?먯꽌 ?뺤씤?????덉쑝硫? 留ㅼ＜ ?붿슂??00:00 (KST)???먮룞 諛섏쁺?⑸땲??');
             closeStatusPopup();
             autoAdvanceSelection(user.id);
             fetchData();
         } catch (e) {
             console.error(e);
-            alert('고정 등록 실패: ' + e.message);
+            alert('怨좎젙 ?깅줉 ?ㅽ뙣: ' + e.message);
         }
     };
 
@@ -2084,7 +2084,7 @@ const StaffDailyAttendance = ({ onBack }) => {
             const { data, error } = await supabase.from('attendance_memos').insert({ date: format(currentViewDate, 'yyyy-MM-dd'), branch, content }).select().single();
             if (error) throw error;
             setDailyMemos(prev => [...prev, data]);
-        } catch (e) { alert('메모 등록 실패'); }
+        } catch (e) { alert('硫붾え ?깅줉 ?ㅽ뙣'); }
     };
     const updateDailyMemo = async (memo) => {
         const content = editingMemoText.trim();
@@ -2102,16 +2102,16 @@ const StaffDailyAttendance = ({ onBack }) => {
             setEditingMemoId(null);
             setEditingMemoText('');
         } catch (e) {
-            alert('수정 실패');
+            alert('?섏젙 ?ㅽ뙣');
         }
     };
 
     const deleteDailyMemo = async (id) => {
-        if (!confirm('삭제하시겠습니까?')) return;
+        if (!confirm('??젣?섏떆寃좎뒿?덇퉴?')) return;
         try {
             await supabase.from('attendance_memos').delete().eq('id', id);
             setDailyMemos(prev => prev.filter(m => m.id !== id));
-        } catch (e) { alert('삭제 실패'); }
+        } catch (e) { alert('??젣 ?ㅽ뙣'); }
     };
 
     const toggleSuggestionComplete = async (suggestion) => {
@@ -2132,7 +2132,7 @@ const StaffDailyAttendance = ({ onBack }) => {
             fetchData();
         } catch (error) {
             console.error('Error updating suggestion:', error);
-            alert('건의사항 상태 업데이트에 실패했습니다.');
+            alert('嫄댁쓽?ы빆 ?곹깭 ?낅뜲?댄듃???ㅽ뙣?덉뒿?덈떎.');
         }
     };
 
@@ -2161,13 +2161,13 @@ const StaffDailyAttendance = ({ onBack }) => {
             const { data, error } = await supabase.from('member_memos').select('*').order('created_at', { ascending: true });
             if (!error) {
                 setMemberMemos(data || []);
-                alert('저장되었습니다.');
+                alert('??λ릺?덉뒿?덈떎.');
                 setIsPopupOpen(false);
                 setHighlightedUserId(null); // Deselect
             }
         } catch (e) {
             console.error('Error saving memo:', e);
-            alert('저장에 실패했습니다.');
+            alert('??μ뿉 ?ㅽ뙣?덉뒿?덈떎.');
         }
     };
 
@@ -2179,7 +2179,7 @@ const StaffDailyAttendance = ({ onBack }) => {
             setIncomingEmployees(prev => [...prev, data].sort((a, b) => new Date(a.entry_date) - new Date(b.entry_date)));
         } catch (e) {
             console.error(e);
-            alert('입사예정자 등록 실패');
+            alert('?낆궗?덉젙???깅줉 ?ㅽ뙣');
         }
     };
 
@@ -2190,18 +2190,18 @@ const StaffDailyAttendance = ({ onBack }) => {
             setIncomingEmployees(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
         } catch (e) {
             console.error(e);
-            alert('수정 실패');
+            alert('?섏젙 ?ㅽ뙣');
         }
     };
 
     const deleteIncomingEmployee = async (id) => {
-        if (!confirm('정말 삭제하시겠습니까?')) return;
+        if (!confirm('?뺣쭚 ??젣?섏떆寃좎뒿?덇퉴?')) return;
         try {
             await supabase.from('incoming_employees').delete().eq('id', id);
             setIncomingEmployees(prev => prev.filter(e => e.id !== id));
         } catch (e) {
             console.error(e);
-            alert('삭제 실패');
+            alert('??젣 ?ㅽ뙣');
         }
     };
 
@@ -2233,7 +2233,7 @@ const StaffDailyAttendance = ({ onBack }) => {
             setSearchTerm('');
             setIsSearchOpen(false);
         } else {
-            alert('사용자를 찾을 수 없습니다.');
+            alert('?ъ슜?먮? 李얠쓣 ???놁뒿?덈떎.');
         }
         // Ensure scroll happens after state update and render
         setTimeout(() => {
@@ -2249,18 +2249,18 @@ const StaffDailyAttendance = ({ onBack }) => {
     };
 
     // Separator row configuration
-    const TEAL_SEPARATOR_SEATS = [54, 102]; // 청록색 두꺼운 구분선 (열람실 구분)
+    const TEAL_SEPARATOR_SEATS = [54, 102]; // 泥?줉???먭볼??援щ텇??(?대엺??援щ텇)
     const THICK_SEPARATOR_SEATS = [7, 17, 22, 27, 32, 37, 42, 47, 52, 58, 62, 66, 70, 74, 78, 82, 83, 87, 90, 93, 96, 99];
     const THIN_SEPARATOR_SEATS = [9, 11, 13, 15, 50];
 
     const getSeparatorStyle = (seatNum) => {
         const numericSeat = Number(seatNum);
         if (TEAL_SEPARATOR_SEATS.includes(numericSeat)) {
-            return { height: 6, color: '#267E82' }; // 청록색
+            return { height: 6, color: '#267E82' }; // 泥?줉??
         } else if (THICK_SEPARATOR_SEATS.includes(numericSeat)) {
-            return { height: 4, color: '#718096' }; // 두꺼운 회색
+            return { height: 4, color: '#718096' }; // ?먭볼???뚯깋
         } else if (THIN_SEPARATOR_SEATS.includes(numericSeat)) {
-            return { height: 2, color: '#a0aec0' }; // 얇은 회색
+            return { height: 2, color: '#a0aec0' }; // ?뉗? ?뚯깋
         }
         return null;
     };
@@ -2416,119 +2416,31 @@ const StaffDailyAttendance = ({ onBack }) => {
                         disabled={pendingSuggestionCount === 0}
                         style={getQuickButtonStyle(pendingSuggestionCount > 0)}
                     >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>회원건의</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{pendingSuggestionCount > 0 ? '회원건의 있음' : '회원건의 없음'}</span>
                     </button>
                     <button
                         onClick={() => sideDishSummary.hasAny && setShowSideDishModal(true)}
                         disabled={!sideDishSummary.hasAny}
                         style={getQuickButtonStyle(sideDishSummary.hasAny)}
                     >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>반찬신청</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{sideDishSummary.hasAny ? '반찬신청 있음' : '반찬신청 없음'}</span>
                     </button>
                     <button
                         onClick={() => setShowTodoModal(true)}
                         style={getQuickButtonStyle(true)}
                     >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>할일목록</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>?좎씪紐⑸줉</span>
                         {staffTodoCount > 0 && <CountBadge count={staffTodoCount} />}
                     </button>
                     <button
                         onClick={() => setShowMemoModal(true)}
                         style={getQuickButtonStyle(true, 'blue')}
                     >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>출석참고</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>異쒖꽍李멸퀬</span>
                         {dailyMemos.length > 0 && <CountBadge count={dailyMemos.length} />}
                     </button>
                 </div>
 
-                {/* Row 2: Search (Left) & Memo (Right) */}
-                <div style={{ display: 'none', justifyContent: 'space-between', alignItems: 'center', padding: '5px 10px 10px 10px', gap: '8px', flexWrap: 'nowrap' }}>
-                    {/* Search Button/Input */}
-                    <div style={{ flexShrink: 0 }}>
-                        {isSearchOpen ? (
-                            <form onSubmit={handleSearch} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                <div style={{
-                                    display: 'flex', alignItems: 'center', height: '32px', boxSizing: 'border-box',
-                                    background: 'white', border: '1px solid #cbd5e0', borderRadius: '20px',
-                                    padding: '0 10px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                }}>
-                                    <Search size={16} color="#a0aec0" style={{ marginRight: '5px' }} />
-                                    <input
-                                        type="text"
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        placeholder="이름 검색"
-                                        style={{
-                                            border: 'none', outline: 'none', fontSize: '0.85rem', width: '80px', color: '#4a5568'
-                                        }}
-                                        autoFocus
-                                        onBlur={() => {
-                                            if (!searchTerm) setIsSearchOpen(false);
-                                        }}
-                                    />
-                                </div>
-                                <button type="submit" style={{ display: 'none' }}></button>
-                            </form>
-                        ) : (
-                            <button
-                                onClick={() => setIsSearchOpen(true)}
-                                style={{
-                                    background: 'white', border: '1px solid #e2e8f0', borderRadius: '20px',
-                                    padding: '6px 10px', fontSize: 'clamp(0.65rem, 2.5vw, 0.85rem)', color: '#718096', fontWeight: 'bold',
-                                    display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer',
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)', height: '32px', whiteSpace: 'nowrap'
-                                }}
-                            >
-                                <Search size={14} />
-                                <span>이름 검색</span>
-                            </button>
-                        )}
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 1, minWidth: 0 }}>
-                        <button
-                            onClick={() => setShowSuggestionModal(true)}
-                            style={{
-                                background: '#f0fff4', border: '1px solid #9ae6b4', borderRadius: '16px',
-                                padding: '6px 10px', fontSize: 'clamp(0.6rem, 2.5vw, 0.85rem)', color: '#2f855a', fontWeight: 'bold',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: 'pointer',
-                                height: '32px', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0
-                            }}
-                        >
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>회원 건의사항</span>
-                            {pendingSuggestionCount > 0 && (
-                                <span style={{
-                                    color: '#2f855a', background: 'white', width: '18px', height: '18px',
-                                    borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '0.7rem', boxShadow: '0 1px 2px rgba(0,0,0,0.1)', flexShrink: 0
-                                }}>
-                                    {pendingSuggestionCount}
-                                </span>
-                            )}
-                        </button>
-
-                        <button
-                            onClick={() => setShowMemoModal(true)}
-                            style={{
-                                background: '#ebf8ff', border: '1px solid #bee3f8', borderRadius: '16px',
-                                padding: '6px 10px', fontSize: 'clamp(0.6rem, 2.5vw, 0.85rem)', color: '#2b6cb0', fontWeight: 'bold',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: 'pointer',
-                                height: '32px', whiteSpace: 'nowrap', flexShrink: 1, minWidth: 0
-                            }}
-                        >
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>오늘 출석 참고사항</span>
-                            {dailyMemos.length > 0 && (
-                                <span style={{
-                                    color: '#38a169', background: 'white', width: '18px', height: '18px',
-                                    borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '0.7rem', boxShadow: '0 1px 2px rgba(0,0,0,0.1)', flexShrink: 0
-                                }}>
-                                    {dailyMemos.length}
-                                </span>
-                            )}
-                        </button>
-                    </div>
-                </div>
             </div>
 
             <div
@@ -2543,8 +2455,8 @@ const StaffDailyAttendance = ({ onBack }) => {
                     <div style={{ position: 'sticky', top: 0, zIndex: 30, display: 'flex', width: 'max-content', backgroundColor: '#f7fafc', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
                         {/* Sticky Columns Left Header */}
                         <div style={{ position: 'sticky', left: 0, zIndex: 40, display: 'flex', height: HEADER_TOTAL_HEIGHT, backgroundColor: '#f7fafc', boxShadow: '2px 0 5px -2px rgba(0,0,0,0.1)' }}>
-                            <div style={{ width: SEAT_WIDTH, borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: `${0.85 * scale}rem`, color: '#4a5568' }}>좌석</div>
-                            <div style={{ width: NAME_WIDTH, borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: `${0.85 * scale}rem`, color: '#4a5568' }}>이름</div>
+                            <div style={{ width: SEAT_WIDTH, borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: `${0.85 * scale}rem`, color: '#4a5568' }}>醫뚯꽍</div>
+                            <div style={{ width: NAME_WIDTH, borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: `${0.85 * scale}rem`, color: '#4a5568' }}>?대쫫</div>
                         </div>
                         {/* Day Header - Dynamic Day */}
                         <div style={{ display: 'flex' }}>
@@ -2688,12 +2600,12 @@ const StaffDailyAttendance = ({ onBack }) => {
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
                     <div style={{ background: 'white', borderRadius: '16px', width: '100%', maxWidth: '460px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
                         <div style={{ padding: '15px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2f855a' }}>회원 건의사항</h3>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2f855a' }}>?뚯썝 嫄댁쓽?ы빆</h3>
                             <button onClick={() => setShowSuggestionModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}><X size={24} color="#a0aec0" /></button>
                         </div>
                         <div style={{ flex: 1, overflowY: 'auto', padding: '20px', background: '#f7fafc' }}>
                             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'none', flexDirection: 'column', gap: '10px' }}>
-                                {dailyMemos.length === 0 && <li style={{ color: '#a0aec0', textAlign: 'center' }}>등록된 참고사항이 없습니다.</li>}
+                                {dailyMemos.length === 0 && <li style={{ color: '#a0aec0', textAlign: 'center' }}>?깅줉??李멸퀬?ы빆???놁뒿?덈떎.</li>}
                                 {dailyMemos.map((memo, idx) => {
                                     const isEditingMemo = editingMemoId === memo.id;
                                     const memoButtonStyle = {
@@ -2772,7 +2684,7 @@ const StaffDailyAttendance = ({ onBack }) => {
                                 })}
                             </ul>
                             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                {sortedMemberSuggestions.length === 0 && <li style={{ color: '#a0aec0', textAlign: 'center' }}>등록된 건의사항이 없습니다.</li>}
+                                {sortedMemberSuggestions.length === 0 && <li style={{ color: '#a0aec0', textAlign: 'center' }}>?깅줉??嫄댁쓽?ы빆???놁뒿?덈떎.</li>}
                                 {sortedMemberSuggestions.map((suggestion) => {
                                     const isCompleted = suggestion.status === 'completed';
 
@@ -2818,8 +2730,8 @@ const StaffDailyAttendance = ({ onBack }) => {
                                                         {suggestion.content}
                                                     </div>
                                                     <div style={{ fontSize: '0.72rem', color: '#718096', marginTop: '5px' }}>
-                                                        요청:{suggestion.authorName}
-                                                        {suggestion.completerName && ` /완료:${suggestion.completerName}`}
+                                                        ?붿껌:{suggestion.authorName}
+                                                        {suggestion.completerName && ` /?꾨즺:${suggestion.completerName}`}
                                                     </div>
                                                 </div>
                                             </div>
@@ -2837,7 +2749,7 @@ const StaffDailyAttendance = ({ onBack }) => {
                                                             }}
                                                         >
                                                             <div style={{ fontSize: '0.72rem', color: '#718096', marginBottom: '4px' }}>
-                                                                답글 · {reply.authorName} · {formatSuggestionReplyTime(reply.createdAt)}
+                                                                ?듦? 쨌 {reply.authorName} 쨌 {formatSuggestionReplyTime(reply.createdAt)}
                                                             </div>
                                                             <div style={{ fontSize: '0.84rem', color: '#2d3748', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                                                                 {reply.text}
@@ -2861,17 +2773,17 @@ const StaffDailyAttendance = ({ onBack }) => {
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
                     <div style={{ background: 'white', borderRadius: '16px', width: '100%', maxWidth: '400px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
                         <div style={{ padding: '15px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2d3748' }}>{format(currentViewDate, 'yyyy.MM.dd')} 참고사항</h3>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#2d3748' }}>{format(currentViewDate, 'yyyy.MM.dd')} 李멸퀬?ы빆</h3>
                             <button onClick={() => setShowMemoModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}><X size={24} color="#a0aec0" /></button>
                         </div>
                         <div style={{ flex: 1, overflowY: 'auto', padding: '20px', background: '#f7fafc' }}>
                             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                {dailyMemos.length === 0 && <li style={{ color: '#a0aec0', textAlign: 'center' }}>등록된 참고사항이 없습니다.</li>}
+                                {dailyMemos.length === 0 && <li style={{ color: '#a0aec0', textAlign: 'center' }}>?깅줉??李멸퀬?ы빆???놁뒿?덈떎.</li>}
                                 {dailyMemos.map((memo, idx) => (
                                     <li key={memo.id} style={{ background: memo.isSystemIncoming ? '#fffaf0' : 'white', padding: '12px', borderRadius: '12px', fontSize: '0.95rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
                                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }}><span style={{ fontWeight: 'bold', color: '#3182ce', minWidth: '20px' }}>{idx + 1}.</span><span style={{ color: '#4a5568', wordBreak: 'break-all', lineHeight: 1.4 }}>{memo.content}</span></div>
                                         {!memo.isSystemIncoming && (
-                                            <button onClick={() => deleteDailyMemo(memo.id)} style={{ background: '#fff5f5', color: '#e53e3e', border: 'none', borderRadius: '6px', padding: '6px 10px', fontSize: '0.8rem', cursor: 'pointer', marginLeft: '10px', fontWeight: 'bold' }}>삭제</button>
+                                            <button onClick={() => deleteDailyMemo(memo.id)} style={{ background: '#fff5f5', color: '#e53e3e', border: 'none', borderRadius: '6px', padding: '6px 10px', fontSize: '0.8rem', cursor: 'pointer', marginLeft: '10px', fontWeight: 'bold' }}>??젣</button>
                                         )}
                                     </li>
                                 ))}
@@ -2879,7 +2791,7 @@ const StaffDailyAttendance = ({ onBack }) => {
                         </div>
                         <div style={{ padding: '20px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '10px', background: 'white', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
                             <input type="text" value={newMemo} onChange={(e) => setNewMemo(e.target.value)} placeholder="참고사항을 입력하세요" style={{ flex: 1, padding: '12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '0.95rem', outline: 'none' }} onKeyPress={(e) => e.key === 'Enter' && addDailyMemo(newMemo.trim())} />
-                            <button onClick={() => { addDailyMemo(newMemo.trim()); setNewMemo(''); }} style={{ background: '#3182ce', color: 'white', border: 'none', borderRadius: '10px', padding: '0 20px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}><Plus size={18} />등록</button>
+                            <button onClick={() => { addDailyMemo(newMemo.trim()); setNewMemo(''); }} style={{ background: '#3182ce', color: 'white', border: 'none', borderRadius: '10px', padding: '0 20px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}><Plus size={18} />?깅줉</button>
                         </div>
                     </div>
                 </div>,
@@ -2897,12 +2809,14 @@ const StaffDailyAttendance = ({ onBack }) => {
                     <div style={{ background: 'white', borderRadius: '16px', width: 'min(720px, calc(100vw - 24px))', height: 'min(82vh, 760px)', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 16px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
                         <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#2d3748', margin: 0 }}>할일목록</h3>
-                            <button onClick={() => setShowTodoModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}><X size={24} color="#a0aec0" /></button>
+                            <button onClick={() => setShowTodoModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
+                                <X size={24} color={'#a0aec0'} />
+                            </button>
                         </div>
                         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '14px', background: '#f7fafc' }}>
                             <StaffTaskBoard
                                 embedded
-                                initialView="tasks"
+                                initialView={'tasks'}
                                 lockView
                                 defaultBranch={branch}
                                 hideSideDishAction
@@ -2924,11 +2838,13 @@ const StaffDailyAttendance = ({ onBack }) => {
                     <div style={{ background: 'white', borderRadius: '16px', width: 'min(520px, calc(100vw - 24px))', maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 16px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
                         <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#2d3748', margin: 0 }}>반찬신청</h3>
-                            <button onClick={() => setShowSideDishModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}><X size={24} color="#a0aec0" /></button>
+                            <button onClick={() => setShowSideDishModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
+                                <X size={24} color={'#a0aec0'} />
+                            </button>
                         </div>
                         <div style={{ flex: 1, overflowY: 'auto', padding: '14px', background: '#f7fafc', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {renderSideDishPeriodList('점심 반찬 신청', sideDishSummary.am)}
-                            {renderSideDishPeriodList('저녁 반찬 신청', sideDishSummary.pm)}
+                            {renderSideDishPeriodList('?먯떖 諛섏갔 ?좎껌', sideDishSummary.am)}
+                            {renderSideDishPeriodList('???諛섏갔 ?좎껌', sideDishSummary.pm)}
                         </div>
                     </div>
                 </div>,
@@ -2971,7 +2887,7 @@ const StaffDailyAttendance = ({ onBack }) => {
                         if (!activeUser) return null;
                         return (
                             <>
-                                <span style={{ fontSize: '0.75rem', color: '#718096' }}>{activeUser.seat_number ? `좌석 ${activeUser.seat_number}` : '-'}</span>
+                                <span style={{ fontSize: '0.75rem', color: '#718096' }}>{activeUser.seat_number ? `醫뚯꽍 ${activeUser.seat_number}` : '-'}</span>
                                 <span style={{
                                     fontSize: '1rem',
                                     fontWeight: 'bold',
@@ -3026,7 +2942,7 @@ const StaffDailyAttendance = ({ onBack }) => {
                             boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                         }}
                     >
-                        기타
+                        湲고?
                     </button>
                     <button
                         onClick={() => {
@@ -3050,3 +2966,4 @@ const StaffDailyAttendance = ({ onBack }) => {
 };
 
 export default StaffDailyAttendance;
+
