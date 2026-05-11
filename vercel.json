@@ -1,15 +1,16 @@
 {
+    "$schema": "https://openapi.vercel.sh/vercel.json",
     "redirects": [
         {
-            "source": "/(.*)",
+            "source": "/:path*",
             "missing": [
                 {
                     "type": "host",
                     "value": "studyfactoryapp.vercel.app"
                 }
             ],
-            "destination": "https://studyfactoryapp.vercel.app/$1",
-            "permanent": false
+            "destination": "https://studyfactoryapp.vercel.app/:path*",
+            "permanent": true
         }
     ],
     "headers": [
@@ -45,7 +46,7 @@
     ],
     "rewrites": [
         {
-            "source": "/(.*)",
+            "source": "/:path*",
             "destination": "/"
         }
     ]
