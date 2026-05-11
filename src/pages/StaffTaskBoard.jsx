@@ -11,6 +11,10 @@ import EmbeddedCalendar from '../components/EmbeddedCalendar';
 const NEW_HIRE_NOTICE_DISMISS_PREFIX = '__NEW_HIRE_NOTICE_DISMISSED__';
 
 const getKstTodayString = () => {
+    return getKstDateStringFromDate(new Date());
+};
+
+const getKstDateStringFromDate = (date) => {
     const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Asia/Seoul',
         year: 'numeric',
@@ -85,9 +89,18 @@ const normalizeSideDishBatches = (items, fallbackSubmittedAt = null) => {
     }];
 };
 
-const StaffTaskBoard = () => {
+const StaffTaskBoard = ({
+    embedded = false,
+    initialView = 'tasks',
+    lockView = false,
+    defaultBranch = null,
+    hideSideDishAction = false
+}) => {
     const { user } = useAuth();
-    const [view, setView] = useState(() => localStorage.getItem('staff_task_board_view') || 'tasks'); // 'tasks' | 'schedule'
+    const [view, setView] = useState(() => {
+        if (lockView) return initialView;
+        return localStorage.getItem('staff_task_board_view') || initialView;
+    }); // 'tasks' | 'schedule'
     const [isAssignmentMode, setIsAssignmentMode] = useState(false); // Assignment mode for schedule
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -133,8 +146,9 @@ const StaffTaskBoard = () => {
 
     // Persist view
     useEffect(() => {
+        if (lockView) return;
         localStorage.setItem('staff_task_board_view', view);
-    }, [view]);
+    }, [lockView, view]);
 
     // Branch configuration
     // Branch configuration
@@ -164,17 +178,22 @@ const StaffTaskBoard = () => {
 
     // Initialize selection
     const [selectedBranch, setSelectedBranch] = useState(() => {
+        if (defaultBranch) return defaultBranch;
         if (user?.branch && user.branch !== '미정') return user.branch;
         return '전체';
     });
 
     // Update selected branch if user data updates
     useEffect(() => {
+        if (defaultBranch) {
+            setSelectedBranch(defaultBranch);
+            return;
+        }
         if (user?.branch) {
             const target = (user.branch === '미정' || user.branch === '전체') ? '전체' : user.branch;
             setSelectedBranch(target);
         }
-    }, [user?.branch]);
+    }, [defaultBranch, user?.branch]);
 
     // Fetch Data
     const fetchData = async () => {
@@ -517,25 +536,12 @@ const StaffTaskBoard = () => {
             if (selectedBranch === '전체') return true;
             return task.branch === selectedBranch;
         })
+        .filter(task => {
+            if (task.status !== 'completed') return true;
+            const completedDate = task.completed_at ? getKstDateStringFromDate(new Date(task.completed_at)) : kstToday;
+            return completedDate === kstToday;
+        })
         .sort((a, b) => {
-            // 1. Pending First
-            if (a.status !== b.status) {
-                return a.status === 'pending' ? -1 : 1;
-            }
-
-            // 2. Inside Pending: Urgent(Red) > Suggestion(Green) > Normal(Blue)
-            if (a.status === 'pending') {
-                const getPriority = (t) => {
-                    if (t.type === 'staff' && t.is_urgent) return 3;
-                    if (t.type === 'new_hire_notice') return 2;
-                    return 1;
-                };
-                const pA = getPriority(a);
-                const pB = getPriority(b);
-                if (pA !== pB) return pB - pA; // Higher priority first
-            }
-
-            // 3. Oldest First (created_at ASC)
             return new Date(a.created_at) - new Date(b.created_at);
         });
 
@@ -754,7 +760,7 @@ const StaffTaskBoard = () => {
         : null;
 
     return (
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '20px' }}>
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: embedded ? 0 : '20px' }}>
             {/* Header Controls: Branch + View Toggle */}
             <div style={{
                 display: 'flex',
@@ -807,7 +813,7 @@ const StaffTaskBoard = () => {
                 {/* Main Action Group (Right Aligned) */}
                 <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto', flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '100%' }}>
                     {/* Assignment Mode Toggle - Only shown in schedule view for admins */}
-                    {view === 'schedule' && user.role === 'admin' && (
+                    {!lockView && view === 'schedule' && user.role === 'admin' && (
                         <button
                             onClick={() => setIsAssignmentMode(!isAssignmentMode)}
                             style={{
@@ -834,6 +840,7 @@ const StaffTaskBoard = () => {
                         </button>
                     )}
 
+                    {!hideSideDishAction && (
                     <button
                         onClick={() => {
                             if (!sideDishSummary.hasAny) return;
@@ -860,8 +867,10 @@ const StaffTaskBoard = () => {
                     >
                         {sideDishSummary.hasAny ? '반찬신청 있음' : '반찬신청 없음'}
                     </button>
+                    )}
 
                     {/* View Toggle Button */}
+                    {!lockView && (
                     <button
                         onClick={() => {
                             setView(view === 'tasks' ? 'schedule' : 'tasks');
@@ -890,6 +899,7 @@ const StaffTaskBoard = () => {
                         {view === 'schedule' ? <MessageCircle size={16} /> : <Calendar size={16} />}
                         {view === 'schedule' ? '업무 보기' : '근무표 보기'}
                     </button>
+                    )}
                 </div>
             </div>
 

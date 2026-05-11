@@ -6,6 +6,7 @@ import { format, addDays, getDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import EmbeddedCalendar from '../components/EmbeddedCalendar';
 import { parseContentWithReplies } from '../utils/replyContent';
+import StaffTaskBoard from './StaffTaskBoard';
 
 const getKstNowParts = (timestamp = Date.now()) => {
     const parts = new Intl.DateTimeFormat('en-CA', {
@@ -30,6 +31,51 @@ const getKstNowParts = (timestamp = Date.now()) => {
         hour: Number(partMap.hour || 0),
         minute: Number(partMap.minute || 0)
     };
+};
+
+const parseSideDishAmount = (value) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+};
+
+const normalizeSideDishItems = (items) => (
+    Array.isArray(items)
+        ? items
+            .map((item) => ({
+                name: String(item?.name || '').trim(),
+                amount: parseSideDishAmount(item?.amount)
+            }))
+            .filter((item) => item.name && item.amount > 0)
+        : []
+);
+
+const normalizeSideDishBatches = (items, fallbackSubmittedAt = null) => {
+    if (!Array.isArray(items) || items.length === 0) return [];
+
+    const looksLikeBatchList = items.some((item) => Array.isArray(item?.items));
+    if (looksLikeBatchList) {
+        return items
+            .map((batch, index) => {
+                const normalizedItems = normalizeSideDishItems(batch?.items);
+                if (normalizedItems.length === 0) return null;
+
+                return {
+                    batchId: String(batch?.batchId || `batch-${index}`),
+                    items: normalizedItems,
+                    submittedAt: batch?.submittedAt || fallbackSubmittedAt || null
+                };
+            })
+            .filter(Boolean);
+    }
+
+    const normalizedItems = normalizeSideDishItems(items);
+    if (normalizedItems.length === 0) return [];
+
+    return [{
+        batchId: 'legacy-batch-0',
+        items: normalizedItems,
+        submittedAt: fallbackSubmittedAt || null
+    }];
 };
 
 const createDateFromYmd = (ymd) => {
@@ -920,6 +966,8 @@ const StaffDailyAttendance = ({ onBack }) => {
     const [dailyMemos, setDailyMemos] = useState([]);
     const [memberMemos, setMemberMemos] = useState([]);
     const [memberSuggestions, setMemberSuggestions] = useState([]);
+    const [staffTodoCount, setStaffTodoCount] = useState(0);
+    const [sideDishRequests, setSideDishRequests] = useState([]);
     const [incomingEmployees, setIncomingEmployees] = useState([]);
     const [pendingTodos, setPendingTodos] = useState({}); // {pending_registration_id: [todos]}
 
@@ -928,8 +976,12 @@ const StaffDailyAttendance = ({ onBack }) => {
     const [isPopupOpen, setIsPopupOpen] = useState(false);
     const [showMemoModal, setShowMemoModal] = useState(false);
     const [showSuggestionModal, setShowSuggestionModal] = useState(false);
+    const [showTodoModal, setShowTodoModal] = useState(false);
+    const [showSideDishModal, setShowSideDishModal] = useState(false);
     const [showIncomingModal, setShowIncomingModal] = useState(false);
     const [newMemo, setNewMemo] = useState('');
+    const [editingMemoId, setEditingMemoId] = useState(null);
+    const [editingMemoText, setEditingMemoText] = useState('');
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [nowTick, setNowTick] = useState(Date.now());
@@ -1035,17 +1087,111 @@ const StaffDailyAttendance = ({ onBack }) => {
                 if (branch === '전체') return true;
                 return suggestion.branch === branch;
             })
+            .filter((suggestion) => {
+                if (suggestion.status !== 'completed') return true;
+                const completedDate = toKstDateStrFromIso(suggestion.resolved_at);
+                return completedDate === kstNow.dateStr;
+            })
             .sort((a, b) => {
                 if (a.status !== b.status) {
                     return a.status === 'pending' ? -1 : 1;
                 }
                 return new Date(a.created_at) - new Date(b.created_at);
             });
-    }, [memberSuggestions, branch]);
+    }, [memberSuggestions, branch, kstNow.dateStr]);
 
     const pendingSuggestionCount = useMemo(() => {
         return sortedMemberSuggestions.filter((suggestion) => suggestion.status === 'pending').length;
     }, [sortedMemberSuggestions]);
+
+    const sideDishSummary = useMemo(() => {
+        const sortBySubmitted = (a, b) => new Date(a.submittedAt || 0) - new Date(b.submittedAt || 0);
+        const toRows = (period) => sideDishRequests
+            .filter((request) => request.period === period)
+            .sort(sortBySubmitted)
+            .flatMap((request) => request.items.map((item) => ({
+                dishName: item.name,
+                amount: item.amount,
+                requesterName: request.requesterName,
+                seatNumber: request.seatNumber
+            })));
+        const am = toRows('am');
+        const pm = toRows('pm');
+
+        return {
+            am,
+            pm,
+            totalCount: am.length + pm.length,
+            hasAny: am.length + pm.length > 0
+        };
+    }, [sideDishRequests]);
+
+    const formatWon = (amount) => `${Number(amount || 0).toLocaleString('ko-KR')}원`;
+
+    const renderSideDishPeriodList = (title, list) => (
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px', background: '#f8fafc' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1f2937', marginBottom: '8px' }}>
+                {title}
+            </div>
+            {list.length === 0 ? (
+                <div style={{ fontSize: '0.82rem', color: '#94a3b8' }}>신청 없음</div>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    {list.map((item, index) => (
+                        <div key={`${title}-${index}-${item.requesterName}-${item.dishName}`} style={{ fontSize: '0.85rem', color: '#374151', lineHeight: 1.35 }}>
+                            {index + 1}. {item.dishName} {formatWon(item.amount)} {item.seatNumber ? `${item.seatNumber}번 ` : ''}{item.requesterName}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+
+    const getQuickButtonStyle = (enabled, tone = 'green') => {
+        const active = tone === 'blue'
+            ? { bg: '#ebf8ff', border: '#bee3f8', color: '#2b6cb0' }
+            : { bg: '#f0fff4', border: '#9ae6b4', color: '#2f855a' };
+
+        return {
+            minWidth: 0,
+            height: '32px',
+            padding: '0 6px',
+            borderRadius: '10px',
+            border: `1px solid ${enabled ? active.border : '#cbd5e0'}`,
+            background: enabled ? active.bg : '#edf2f7',
+            color: enabled ? active.color : '#94a3b8',
+            fontSize: 'clamp(0.62rem, 2.35vw, 0.78rem)',
+            fontWeight: '800',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '3px',
+            cursor: enabled ? 'pointer' : 'not-allowed',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            boxSizing: 'border-box'
+        };
+    };
+
+    const CountBadge = ({ count }) => (
+        <span style={{
+            color: '#2f855a',
+            background: 'white',
+            minWidth: '17px',
+            height: '17px',
+            padding: '0 4px',
+            borderRadius: '999px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '0.68rem',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+            flexShrink: 0,
+            boxSizing: 'border-box'
+        }}>
+            {count}
+        </span>
+    );
 
     const formatSuggestionReplyTime = (createdAt) => {
         if (!createdAt) return '';
@@ -1119,6 +1265,28 @@ const StaffDailyAttendance = ({ onBack }) => {
             })
             .subscribe();
 
+        const staffTodoChannel = supabase
+            .channel('staff_todo_attendance_changes')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'staff_todos'
+            }, () => {
+                fetchData();
+            })
+            .subscribe();
+
+        const sideDishChannel = supabase
+            .channel('side_dish_attendance_changes')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'side_dish_requests'
+            }, () => {
+                fetchData();
+            })
+            .subscribe();
+
         const suggestionsChannel = supabase
             .channel('suggestions_attendance_changes')
             .on('postgres_changes', {
@@ -1147,6 +1315,8 @@ const StaffDailyAttendance = ({ onBack }) => {
             memosChannel.unsubscribe();
             pendingChannel.unsubscribe();
             pendingTodoChannel.unsubscribe();
+            staffTodoChannel.unsubscribe();
+            sideDishChannel.unsubscribe();
             suggestionsChannel.unsubscribe();
             newBeverageChannel.unsubscribe();
         };
@@ -1180,7 +1350,7 @@ const StaffDailyAttendance = ({ onBack }) => {
             const startDate = dateStr;
             const endDate = dateStr;
 
-            const [userRes, logRes, vacRes, dailyMemoRes, memberMemoRes, pendingRes, beverageRes, todosRes, suggestionsRes, newBeverageReqRes] = await Promise.all([
+            const [userRes, logRes, vacRes, dailyMemoRes, memberMemoRes, pendingRes, beverageRes, todosRes, suggestionsRes, newBeverageReqRes, staffTaskRes, sideDishRes] = await Promise.all([
                 supabase.from('profiles').select('*').eq('branch', branch).order('seat_number', { ascending: true, nullsLast: true }),
                 supabase.from('attendance_logs').select('id, user_id, date, period, status').gte('date', startDate).lte('date', endDate),
                 supabase.from('vacation_requests').select('*').gte('date', startDate).lte('date', endDate),
@@ -1194,6 +1364,7 @@ const StaffDailyAttendance = ({ onBack }) => {
                     content,
                     status,
                     created_at,
+                    resolved_at,
                     author:user_id ( name, branch ),
                     completer:completed_by ( name )
                 `),
@@ -1206,7 +1377,17 @@ const StaffDailyAttendance = ({ onBack }) => {
                     created_at,
                     updated_at,
                     requester:user_id ( name, seat_number, branch )
-                `)
+                `),
+                supabase.from('staff_todos').select('id, content, status, branch, pending_registration_id, completed_at, created_at').eq('branch', branch),
+                supabase.from('side_dish_requests').select(`
+                    id,
+                    period,
+                    items,
+                    total_amount,
+                    payment_completed,
+                    submitted_at,
+                    requester:user_id ( name, branch, seat_number )
+                `).eq('request_date', dateStr).order('submitted_at', { ascending: true })
             ]);
 
             if (userRes.error) throw userRes.error;
@@ -1215,6 +1396,12 @@ const StaffDailyAttendance = ({ onBack }) => {
             if (beverageRes.error) throw beverageRes.error;
             if (todosRes.error) throw todosRes.error;
             if (suggestionsRes.error) throw suggestionsRes.error;
+            if (staffTaskRes.error) {
+                console.warn('Staff task count unavailable:', staffTaskRes.error);
+            }
+            if (sideDishRes.error) {
+                console.warn('Side dish requests unavailable:', sideDishRes.error);
+            }
             if (newBeverageReqRes.error) {
                 console.warn('New beverage request feed unavailable:', newBeverageReqRes.error);
             }
@@ -1283,6 +1470,51 @@ const StaffDailyAttendance = ({ onBack }) => {
                 todosByPending[todo.pending_registration_id].push(todo);
             });
             setPendingTodos(todosByPending);
+
+            const staffTodoRows = staffTaskRes.error ? [] : (staffTaskRes.data || []);
+            const dismissMarkers = new Set(
+                staffTodoRows
+                    .filter((todo) => !todo.pending_registration_id && typeof todo.content === 'string' && todo.content.startsWith('__NEW_HIRE_NOTICE_DISMISSED__:'))
+                    .map((todo) => todo.content.replace('__NEW_HIRE_NOTICE_DISMISSED__:', '').trim())
+            );
+            const manualPendingCount = staffTodoRows.filter((todo) => (
+                !todo.pending_registration_id
+                && !(typeof todo.content === 'string' && todo.content.startsWith('__NEW_HIRE_NOTICE_DISMISSED__:'))
+                && todo.status !== 'completed'
+            )).length;
+            const groupedNewHireKeys = new Map();
+            (pendingRes.data || []).forEach((emp) => {
+                if (!emp.expected_start_date) return;
+                const key = `${emp.branch || ''}_${emp.expected_start_date}`;
+                if (!groupedNewHireKeys.has(key)) groupedNewHireKeys.set(key, []);
+                groupedNewHireKeys.get(key).push(emp.id);
+            });
+            const newHirePendingCount = Array.from(groupedNewHireKeys.entries()).filter(([key, pendingIds]) => {
+                if (dismissMarkers.has(key)) return false;
+                const related = staffTodoRows.filter((todo) => pendingIds.includes(todo.pending_registration_id));
+                return related.length === 0 || related.some((todo) => todo.status !== 'completed');
+            }).length;
+            setStaffTodoCount(manualPendingCount + newHirePendingCount);
+
+            const normalizedSideDish = sideDishRes.error ? [] : (sideDishRes.data || [])
+                .filter((row) => row.payment_completed && row.submitted_at)
+                .filter((row) => !row.requester?.branch || row.requester.branch === branch)
+                .map((row) => {
+                    const batches = normalizeSideDishBatches(row.items, row.submitted_at);
+                    const items = batches.flatMap((batch) => batch.items);
+                    const calculatedTotal = items.reduce((sum, item) => sum + item.amount, 0);
+
+                    return {
+                        id: row.id,
+                        period: row.period,
+                        items,
+                        totalAmount: row.total_amount || calculatedTotal,
+                        requesterName: row.requester?.name || '',
+                        seatNumber: row.requester?.seat_number || null,
+                        submittedAt: row.submitted_at
+                    };
+                });
+            setSideDishRequests(normalizedSideDish);
 
             const enrichedIncomingEmployees = (pendingRes.data || []).map((emp) => {
                 const relatedTodos = todosByPending[emp.id] || [];
@@ -1356,6 +1588,7 @@ const StaffDailyAttendance = ({ onBack }) => {
                     replies,
                     status: suggestion.status === 'resolved' ? 'completed' : 'pending',
                     created_at: suggestion.created_at,
+                    resolved_at: suggestion.resolved_at,
                     authorName: suggestion.author?.name || '익명',
                     branch: suggestion.author?.branch || '알수없음',
                     completerName: suggestion.completer?.name || null
@@ -1853,6 +2086,26 @@ const StaffDailyAttendance = ({ onBack }) => {
             setDailyMemos(prev => [...prev, data]);
         } catch (e) { alert('메모 등록 실패'); }
     };
+    const updateDailyMemo = async (memo) => {
+        const content = editingMemoText.trim();
+        if (!content) return;
+
+        try {
+            const { data, error } = await supabase
+                .from('attendance_memos')
+                .update({ content })
+                .eq('id', memo.id)
+                .select()
+                .single();
+            if (error) throw error;
+            setDailyMemos(prev => prev.map(item => item.id === memo.id ? { ...item, ...(data || {}), content } : item));
+            setEditingMemoId(null);
+            setEditingMemoText('');
+        } catch (e) {
+            alert('수정 실패');
+        }
+    };
+
     const deleteDailyMemo = async (id) => {
         if (!confirm('삭제하시겠습니까?')) return;
         try {
@@ -1870,6 +2123,7 @@ const StaffDailyAttendance = ({ onBack }) => {
                 .from('suggestions')
                 .update({
                     status: nextDbStatus,
+                    resolved_at: nextDbStatus === 'resolved' ? new Date().toISOString() : null,
                     completed_by: nextDbStatus === 'resolved' ? authUser?.id : null
                 })
                 .eq('id', suggestion.id);
@@ -2100,21 +2354,95 @@ const StaffDailyAttendance = ({ onBack }) => {
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'white' }}>
             {/* Header: Row 1 Date (Top), Row 2 Memo (Bottom) */}
             <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-                {/* Row 1: Centered Date Navigator (Top) - Adjusted Padding */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', padding: '15px 10px 0 10px', position: 'relative' }}>
-                    <button onClick={() => changeDate(-1)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '5px' }}>
-                        <ChevronLeft size={24} color="#4a5568" />
+                {/* Row 1: Search + Date */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(86px, 0.72fr) minmax(168px, 1.28fr)', alignItems: 'center', gap: '8px', padding: '10px 10px 4px 10px' }}>
+                    <div style={{ minWidth: 0 }}>
+                        {isSearchOpen ? (
+                            <form onSubmit={handleSearch} style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0 }}>
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', height: '32px', boxSizing: 'border-box', minWidth: 0, width: '100%',
+                                    background: 'white', border: '1px solid #cbd5e0', borderRadius: '20px',
+                                    padding: '0 10px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                }}>
+                                    <Search size={16} color="#a0aec0" style={{ marginRight: '5px', flexShrink: 0 }} />
+                                    <input
+                                        type="text"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        placeholder="이름 검색"
+                                        style={{
+                                            border: 'none', outline: 'none', fontSize: '0.85rem', width: '100%', minWidth: 0, color: '#4a5568'
+                                        }}
+                                        autoFocus
+                                        onBlur={() => {
+                                            if (!searchTerm) setIsSearchOpen(false);
+                                        }}
+                                    />
+                                </div>
+                                <button type="submit" style={{ display: 'none' }}></button>
+                            </form>
+                        ) : (
+                            <button
+                                onClick={() => setIsSearchOpen(true)}
+                                style={{
+                                    background: 'white', border: '1px solid #e2e8f0', borderRadius: '20px',
+                                    padding: '6px 8px', fontSize: 'clamp(0.65rem, 2.5vw, 0.85rem)', color: '#718096', fontWeight: 'bold',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: 'pointer',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)', height: '32px', whiteSpace: 'nowrap', width: '100%', overflow: 'hidden'
+                                }}
+                            >
+                                <Search size={14} />
+                                <span>이름검색</span>
+                            </button>
+                        )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: 0, transform: 'translateX(5px)' }}>
+                        <button onClick={() => changeDate(-1)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px', flexShrink: 0 }}>
+                            <ChevronLeft size={22} color="#4a5568" />
+                        </button>
+                        <span style={{ fontSize: 'clamp(1rem, 4vw, 1.2rem)', fontWeight: 'bold', color: '#2d3748', minWidth: 0, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {format(currentViewDate, 'yyyy.MM.dd (EEE)', { locale: ko })}
+                        </span>
+                        <button onClick={() => changeDate(1)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '4px', flexShrink: 0 }}>
+                            <ChevronRight size={22} color="#4a5568" />
+                        </button>
+                    </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '5px', padding: '4px 10px 8px 10px' }}>
+                    <button
+                        onClick={() => pendingSuggestionCount > 0 && setShowSuggestionModal(true)}
+                        disabled={pendingSuggestionCount === 0}
+                        style={getQuickButtonStyle(pendingSuggestionCount > 0)}
+                    >
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>회원건의</span>
                     </button>
-                    <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#2d3748', minWidth: '150px', textAlign: 'center' }}>
-                        {format(currentViewDate, 'yyyy.MM.dd (EEE)', { locale: ko })}
-                    </span>
-                    <button onClick={() => changeDate(1)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: '5px' }}>
-                        <ChevronRight size={24} color="#4a5568" />
+                    <button
+                        onClick={() => sideDishSummary.hasAny && setShowSideDishModal(true)}
+                        disabled={!sideDishSummary.hasAny}
+                        style={getQuickButtonStyle(sideDishSummary.hasAny)}
+                    >
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>반찬신청</span>
+                    </button>
+                    <button
+                        onClick={() => setShowTodoModal(true)}
+                        style={getQuickButtonStyle(true)}
+                    >
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>할일목록</span>
+                        {staffTodoCount > 0 && <CountBadge count={staffTodoCount} />}
+                    </button>
+                    <button
+                        onClick={() => setShowMemoModal(true)}
+                        style={getQuickButtonStyle(true, 'blue')}
+                    >
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>출석참고</span>
+                        {dailyMemos.length > 0 && <CountBadge count={dailyMemos.length} />}
                     </button>
                 </div>
 
                 {/* Row 2: Search (Left) & Memo (Right) */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 10px 10px 10px', gap: '8px', flexWrap: 'nowrap' }}>
+                <div style={{ display: 'none', justifyContent: 'space-between', alignItems: 'center', padding: '5px 10px 10px 10px', gap: '8px', flexWrap: 'nowrap' }}>
                     {/* Search Button/Input */}
                     <div style={{ flexShrink: 0 }}>
                         {isSearchOpen ? (
@@ -2364,6 +2692,85 @@ const StaffDailyAttendance = ({ onBack }) => {
                             <button onClick={() => setShowSuggestionModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}><X size={24} color="#a0aec0" /></button>
                         </div>
                         <div style={{ flex: 1, overflowY: 'auto', padding: '20px', background: '#f7fafc' }}>
+                            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'none', flexDirection: 'column', gap: '10px' }}>
+                                {dailyMemos.length === 0 && <li style={{ color: '#a0aec0', textAlign: 'center' }}>등록된 참고사항이 없습니다.</li>}
+                                {dailyMemos.map((memo, idx) => {
+                                    const isEditingMemo = editingMemoId === memo.id;
+                                    const memoButtonStyle = {
+                                        border: '1px solid #cbd5e0',
+                                        borderRadius: '999px',
+                                        padding: '6px 10px',
+                                        minWidth: '36px',
+                                        height: '30px',
+                                        background: 'white',
+                                        color: '#4a5568',
+                                        fontSize: '0.78rem',
+                                        cursor: 'pointer',
+                                        fontWeight: '800',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '4px',
+                                        flexShrink: 0
+                                    };
+
+                                    return (
+                                        <li key={memo.id} style={{ background: memo.isSystemIncoming ? '#fffaf0' : 'white', padding: '12px', borderRadius: '12px', fontSize: '0.95rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                                                <span style={{ fontWeight: 'bold', color: '#3182ce', minWidth: '20px' }}>{idx + 1}.</span>
+                                                {isEditingMemo ? (
+                                                    <input
+                                                        type="text"
+                                                        value={editingMemoText}
+                                                        onChange={(e) => setEditingMemoText(e.target.value)}
+                                                        autoFocus
+                                                        style={{ flex: 1, minWidth: 0, padding: '8px 10px', border: '1px solid #cbd5e0', borderRadius: '10px', fontSize: '0.92rem', outline: 'none' }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') updateDailyMemo(memo);
+                                                            if (e.key === 'Escape') {
+                                                                setEditingMemoId(null);
+                                                                setEditingMemoText('');
+                                                            }
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <span style={{ color: '#4a5568', wordBreak: 'break-all', lineHeight: 1.4 }}>{memo.content}</span>
+                                                )}
+                                            </div>
+                                            {!memo.isSystemIncoming && (
+                                                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (isEditingMemo) {
+                                                                updateDailyMemo(memo);
+                                                                return;
+                                                            }
+                                                            setEditingMemoId(memo.id);
+                                                            setEditingMemoText(memo.content || '');
+                                                        }}
+                                                        style={memoButtonStyle}
+                                                    >
+                                                        ✏️ {isEditingMemo ? '저장' : '수정'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (isEditingMemo) {
+                                                                setEditingMemoId(null);
+                                                                setEditingMemoText('');
+                                                                return;
+                                                            }
+                                                            deleteDailyMemo(memo.id);
+                                                        }}
+                                                        style={memoButtonStyle}
+                                                    >
+                                                        X
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </li>
+                                    );
+                                })}
+                            </ul>
                             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 {sortedMemberSuggestions.length === 0 && <li style={{ color: '#a0aec0', textAlign: 'center' }}>등록된 건의사항이 없습니다.</li>}
                                 {sortedMemberSuggestions.map((suggestion) => {
@@ -2473,6 +2880,55 @@ const StaffDailyAttendance = ({ onBack }) => {
                         <div style={{ padding: '20px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '10px', background: 'white', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
                             <input type="text" value={newMemo} onChange={(e) => setNewMemo(e.target.value)} placeholder="참고사항을 입력하세요" style={{ flex: 1, padding: '12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '0.95rem', outline: 'none' }} onKeyPress={(e) => e.key === 'Enter' && addDailyMemo(newMemo.trim())} />
                             <button onClick={() => { addDailyMemo(newMemo.trim()); setNewMemo(''); }} style={{ background: '#3182ce', color: 'white', border: 'none', borderRadius: '10px', padding: '0 20px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}><Plus size={18} />등록</button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* Todo Modal */}
+            {showTodoModal && createPortal(
+                <div
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setShowTodoModal(false);
+                    }}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px' }}
+                >
+                    <div style={{ background: 'white', borderRadius: '16px', width: 'min(720px, calc(100vw - 24px))', height: 'min(82vh, 760px)', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 16px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
+                        <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                            <h3 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#2d3748', margin: 0 }}>할일목록</h3>
+                            <button onClick={() => setShowTodoModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}><X size={24} color="#a0aec0" /></button>
+                        </div>
+                        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '14px', background: '#f7fafc' }}>
+                            <StaffTaskBoard
+                                embedded
+                                initialView="tasks"
+                                lockView
+                                defaultBranch={branch}
+                                hideSideDishAction
+                            />
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* Side Dish Modal */}
+            {showSideDishModal && createPortal(
+                <div
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setShowSideDishModal(false);
+                    }}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px' }}
+                >
+                    <div style={{ background: 'white', borderRadius: '16px', width: 'min(520px, calc(100vw - 24px))', maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 16px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
+                        <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#2d3748', margin: 0 }}>반찬신청</h3>
+                            <button onClick={() => setShowSideDishModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}><X size={24} color="#a0aec0" /></button>
+                        </div>
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '14px', background: '#f7fafc', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {renderSideDishPeriodList('점심 반찬 신청', sideDishSummary.am)}
+                            {renderSideDishPeriodList('저녁 반찬 신청', sideDishSummary.pm)}
                         </div>
                     </div>
                 </div>,
