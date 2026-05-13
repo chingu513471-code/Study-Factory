@@ -445,7 +445,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div
-                style={{ height: '536px', minHeight: '536px', flexShrink: 0, position: 'relative', overflow: 'hidden' }}
+                style={{ height: '563px', minHeight: '563px', flexShrink: 0, position: 'relative', overflow: 'hidden' }}
             >
                 <div style={{ height: '100%', display: 'flex', transition: 'transform 260ms ease', ...roomTransform }}>
                     {rooms.map((room) => (
@@ -607,7 +607,7 @@ const SeatGrid = ({ layout, seatInfoByNumber, onSeatClick }) => {
     const rowCount = layout.length;
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rowCount}, 31px)`, gap: '3px', padding: '6px', borderRadius: '12px', background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 3px 10px rgba(15, 23, 42, 0.04)', width: '100%', boxSizing: 'border-box' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rowCount}, 33px)`, gap: '3px', padding: '6px', borderRadius: '12px', background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 3px 10px rgba(15, 23, 42, 0.04)', width: '100%', boxSizing: 'border-box' }}>
         {layout.flatMap((row, rowIndex) => (
             row.map((cell, colIndex) => (
                 <SeatCell key={`${rowIndex}-${colIndex}`} value={cell} info={seatInfoByNumber[cell]} onSeatClick={onSeatClick} />
