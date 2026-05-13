@@ -1,17 +1,19 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
+import { parseBeverageRequestDrinks } from '../utils/beverageRequests';
 
 const ROOM_1_LAYOUT = [
     [54, null, null, null, null, null, null],
     [53, 52, 51, 50, 49, 48, null],
-    [null, null, null, null, null, null, 7],
-    [47, 46, 45, 44, 43, null, 6],
-    [42, 41, 40, 39, 38, null, 5],
-    [null, null, null, null, null, null, 4],
-    [37, 36, 35, 34, 33, null, 3],
-    [32, 31, 30, 29, 28, null, 2],
-    [null, null, null, null, null, null, 1],
-    [27, 26, 25, 24, 23, null, null],
+    [null, null, null, null, null, null, null],
+    [47, 46, 45, 44, 43, null, 7],
+    [42, 41, 40, 39, 38, null, 6],
+    [null, null, null, null, null, null, 5],
+    [37, 36, 35, 34, 33, null, 4],
+    [32, 31, 30, 29, 28, null, 3],
+    [null, null, null, null, null, null, 2],
+    [27, 26, 25, 24, 23, null, 1],
     [22, 21, 20, 19, 18, null, null],
     [null, null, null, null, null, null, null],
     [16, 14, 12, 10, 8, '문', null],
@@ -25,6 +27,7 @@ const rooms = [
 
 const StaffBeverageServingSheet = ({ onBack }) => {
     const [activeRoomIndex, setActiveRoomIndex] = useState(0);
+    const [seatInfoByNumber, setSeatInfoByNumber] = useState({});
     const dragStartXRef = useRef(null);
 
     const roomTransform = useMemo(() => ({
@@ -48,6 +51,60 @@ const StaffBeverageServingSheet = ({ onBack }) => {
             setActiveRoomIndex((index) => Math.max(index - 1, 0));
         }
     };
+
+    const fetchSeatInfo = async () => {
+        try {
+            const { data: users, error: userError } = await supabase
+                .from('authorized_users')
+                .select('id, name, seat_number')
+                .not('seat_number', 'is', null);
+
+            if (userError) throw userError;
+
+            const userIds = (users || []).map((user) => user.id);
+            let requestMap = {};
+
+            if (userIds.length > 0) {
+                const { data: requests, error: requestError } = await supabase
+                    .from('new_beverage_requests')
+                    .select('user_id, beverage_1_choice, beverage_2_choice, beverage_2_custom, use_personal_tumbler')
+                    .in('user_id', userIds);
+
+                if (requestError) throw requestError;
+                requestMap = Object.fromEntries((requests || []).map((request) => [request.user_id, request]));
+            }
+
+            const nextSeatInfo = {};
+            (users || []).forEach((user) => {
+                nextSeatInfo[Number(user.seat_number)] = {
+                    name: user.name,
+                    drinks: parseBeverageRequestDrinks(requestMap[user.id])
+                };
+            });
+            setSeatInfoByNumber(nextSeatInfo);
+        } catch (error) {
+            console.error('Error fetching serving seat info:', error);
+        }
+    };
+
+    useEffect(() => {
+        fetchSeatInfo();
+
+        const requestChannel = supabase
+            .channel('serving_sheet_beverage_requests')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'new_beverage_requests' }, fetchSeatInfo)
+            .subscribe();
+
+        const userChannel = supabase
+            .channel('serving_sheet_users')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'authorized_users' }, fetchSeatInfo)
+            .subscribe();
+
+        return () => {
+            requestChannel.unsubscribe();
+            userChannel.unsubscribe();
+        };
+    }, []);
 
     return (
         <div style={{
@@ -154,7 +211,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 
                             {room.layout.length > 0 ? (
                                 <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingBottom: '18px' }}>
-                                    <SeatGrid layout={room.layout} />
+                                    <SeatGrid layout={room.layout} seatInfoByNumber={seatInfoByNumber} />
                                 </div>
                             ) : (
                                 <div style={{
@@ -202,13 +259,13 @@ const StaffBeverageServingSheet = ({ onBack }) => {
     );
 };
 
-const SeatGrid = ({ layout }) => (
+const SeatGrid = ({ layout, seatInfoByNumber }) => (
     <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-        gridTemplateRows: 'repeat(14, 72px)',
-        gap: '8px',
-        padding: '12px',
+        gridTemplateRows: 'repeat(14, 50px)',
+        gap: '6px',
+        padding: '10px',
         borderRadius: '18px',
         background: 'white',
         border: '1px solid #e2e8f0',
@@ -218,13 +275,13 @@ const SeatGrid = ({ layout }) => (
     }}>
         {layout.flatMap((row, rowIndex) => (
             row.map((cell, colIndex) => (
-                <SeatCell key={`${rowIndex}-${colIndex}`} value={cell} />
+                <SeatCell key={`${rowIndex}-${colIndex}`} value={cell} info={seatInfoByNumber[cell]} />
             ))
         ))}
     </div>
 );
 
-const SeatCell = ({ value }) => {
+const SeatCell = ({ value, info }) => {
     const isDoor = value === '문';
     const isEmpty = value === null;
 
@@ -236,15 +293,59 @@ const SeatCell = ({ value }) => {
             background: isEmpty ? 'transparent' : isDoor ? '#e2e8f0' : '#f0fdfa',
             color: isDoor ? '#475569' : '#155e63',
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
             fontWeight: '900',
-            fontSize: isDoor ? 'clamp(0.74rem, 1.4vw, 1rem)' : 'clamp(0.82rem, 1.7vw, 1.18rem)',
+            fontSize: isDoor ? '0.72rem' : '0.7rem',
             boxShadow: isEmpty ? 'none' : 'inset 0 -1px 0 rgba(15,23,42,0.04)',
             userSelect: 'none',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            padding: isEmpty ? 0 : '4px 5px',
+            boxSizing: 'border-box',
+            lineHeight: 1.12
         }}>
-            {!isEmpty ? value : ''}
+            {!isEmpty && !isDoor && (
+                <>
+                    <div style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'center',
+                        gap: '3px',
+                        minHeight: '15px',
+                        color: '#134e4a'
+                    }}>
+                        <span style={{ flexShrink: 0, fontSize: '0.72rem' }}>{value}</span>
+                        {info?.name && (
+                            <span style={{
+                                minWidth: 0,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                fontSize: '0.66rem'
+                            }}>
+                                {info.name}
+                            </span>
+                        )}
+                    </div>
+                    {info?.drinks?.length > 0 && (
+                        <div style={{
+                            width: '100%',
+                            marginTop: '2px',
+                            color: '#0f766e',
+                            fontWeight: '700',
+                            fontSize: '0.58rem',
+                            lineHeight: 1.12,
+                            overflow: 'hidden',
+                            textAlign: 'center'
+                        }}>
+                            {info.drinks.slice(0, 2).join(', ')}
+                        </div>
+                    )}
+                </>
+            )}
+            {isDoor ? value : ''}
         </div>
     );
 };
