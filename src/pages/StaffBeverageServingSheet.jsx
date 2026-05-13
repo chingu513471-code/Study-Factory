@@ -411,8 +411,8 @@ const StaffBeverageServingSheet = ({ onBack }) => {
     }, []);
 
     return (
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'transparent', color: '#1f2937', overflow: 'hidden' }}>
-            <div style={{ flexShrink: 0, minHeight: '46px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '0 4px 10px 0', background: 'transparent', borderBottom: '1px solid #e2e8f0' }}>
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'transparent', color: '#1f2937', overflowY: 'auto', overflowX: 'hidden', paddingRight: '4px' }}>
+            <div style={{ flexShrink: 0, minHeight: '46px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '0 4px 10px 0', background: 'transparent', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                     <button onClick={onBack} style={{ width: '34px', height: '34px', border: 'none', borderRadius: '9px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                         <ChevronLeft size={21} color="#334155" />
@@ -420,7 +420,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                     <h3 style={{ margin: 0, fontSize: '1.02rem', fontWeight: '800', whiteSpace: 'nowrap' }}>음료 서빙표</h3>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     {rooms.map((room, index) => (
                         <button
                             key={room.id}
@@ -444,7 +444,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                 </div>
             </div>
 
-            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
             <div
                 style={{ height: '563px', minHeight: '563px', flexShrink: 0, position: 'relative', overflow: 'hidden' }}
             >
