@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { getTodayString } from '../utils/dateUtils';
@@ -455,7 +456,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                 ))}
             </div>
 
-            {selectedSeat && (
+            {selectedSeat && typeof document !== 'undefined' && createPortal(
                 <SeatEditModal
                     seat={selectedSeat}
                     drinks={editDrinks}
@@ -468,7 +469,8 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                     onChangeNote={setEditNote}
                     onClose={closeSeatPopup}
                     onSave={saveSeatBeverage}
-                />
+                />,
+                document.body
             )}
         </div>
     );
@@ -611,6 +613,11 @@ const SeatCell = ({ value, info, onSeatClick }) => {
                     <div style={{ width: '100%', marginTop: '0', color: isAway ? '#94a3b8' : '#0f766e', fontWeight: '700', fontSize: '0.48rem', lineHeight: 1.05, overflow: 'hidden', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                         {isAway ? info.awayReason : info?.drinks?.join(', ')}
                     </div>
+                    {info?.note && (
+                        <div style={{ width: '100%', marginTop: '1px', color: '#94a3b8', fontWeight: '700', fontSize: '0.43rem', lineHeight: 1.05, overflow: 'hidden', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                            {info.note}
+                        </div>
+                    )}
                 </>
             )}
             {isDoor ? value : ''}
@@ -624,7 +631,7 @@ const SeatEditModal = ({ seat, drinks, drinkInput, note, saving, onChangeDrinkIn
         style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 1000,
+            zIndex: 99999,
             background: 'rgba(15, 23, 42, 0.42)',
             display: 'flex',
             alignItems: 'center',
