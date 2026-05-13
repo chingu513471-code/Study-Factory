@@ -257,15 +257,20 @@ const StaffBeverageServingSheet = ({ onBack }) => {
     );
 };
 
-const SeatGrid = ({ layout, seatInfoByNumber }) => (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gridTemplateRows: 'repeat(14, 31px)', gap: '3px', padding: '6px', borderRadius: '12px', background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 3px 10px rgba(15, 23, 42, 0.04)', width: '100%', boxSizing: 'border-box' }}>
+const SeatGrid = ({ layout, seatInfoByNumber }) => {
+    const columnCount = Math.max(...layout.map((row) => row.length));
+    const rowCount = layout.length;
+
+    return (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rowCount}, 31px)`, gap: '3px', padding: '6px', borderRadius: '12px', background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 3px 10px rgba(15, 23, 42, 0.04)', width: '100%', boxSizing: 'border-box' }}>
         {layout.flatMap((row, rowIndex) => (
             row.map((cell, colIndex) => (
                 <SeatCell key={`${rowIndex}-${colIndex}`} value={cell} info={seatInfoByNumber[cell]} />
             ))
         ))}
-    </div>
-);
+        </div>
+    );
+};
 
 const SeatCell = ({ value, info }) => {
     const isDoor = value === '문';
