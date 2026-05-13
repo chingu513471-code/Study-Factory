@@ -265,9 +265,9 @@ const SeatGrid = ({ layout, seatInfoByNumber }) => (
     <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-        gridTemplateRows: 'repeat(14, 36px)',
-        gap: '4px',
-        padding: '8px',
+        gridTemplateRows: 'repeat(14, 31px)',
+        gap: '3px',
+        padding: '6px',
         borderRadius: '12px',
         background: 'white',
         border: '1px solid #e2e8f0',
@@ -303,7 +303,7 @@ const SeatCell = ({ value, info }) => {
             boxShadow: isEmpty ? 'none' : 'inset 0 -1px 0 rgba(15,23,42,0.04)',
             userSelect: 'none',
             overflow: 'hidden',
-            padding: isEmpty ? 0 : '2px 4px',
+            padding: isEmpty ? 0 : '1px 3px',
             boxSizing: 'border-box',
             lineHeight: 1.06
         }}>
