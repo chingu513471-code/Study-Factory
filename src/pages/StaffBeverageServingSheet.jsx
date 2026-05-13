@@ -275,11 +275,12 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                     return {
                         id: row.id,
                         createdAt: row.created_at || '',
-                        time: formatEventDateTime(row.created_at),
+                        time: toKoreanTime(row.created_at),
                         name: user.name || '회원',
                         seatNumber: user.seat_number,
                         text: formatLeaveText(row),
-                        tone: getLeaveTone(row)
+                        tone: getLeaveTone(row),
+                        drinks: parseBeverageRequestDrinks(requestMap[row.user_id])
                     };
                 })
                 .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
@@ -556,7 +557,14 @@ const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
             {leaveEvents.length === 0 ? (
                 <EmptyText text="8시 이후 신청 휴무 없음" />
             ) : leaveEvents.slice(0, 8).map((item) => (
-                <CompactLine key={item.id} left={`${item.time} ${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`} right={item.text} tone={item.tone} />
+                <CompactLine
+                    key={item.id}
+                    left={`${item.time} ${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`}
+                    right={item.text}
+                    sub={item.drinks.length > 0 ? item.drinks.join(', ') : '음료 없음'}
+                    subTone="danger"
+                    tone={item.tone}
+                />
             ))}
         </InfoPanel>
 
@@ -583,9 +591,10 @@ const InfoPanel = ({ title, children }) => (
     </div>
 );
 
-const CompactLine = ({ left, right, sub, tone }) => {
+const CompactLine = ({ left, right, sub, subTone, tone }) => {
     const leftColor = tone === 'importantLeave' ? '#111827' : tone === 'muted' ? '#cbd5e1' : '#64748b';
     const rightColor = tone === 'importantLeave' ? '#155e63' : tone === 'muted' ? '#cbd5e1' : '#155e63';
+    const subColor = subTone === 'danger' ? '#dc2626' : '#94a3b8';
 
     return (
     <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '2px' }}>
@@ -593,7 +602,7 @@ const CompactLine = ({ left, right, sub, tone }) => {
             <span style={{ color: leftColor, fontWeight: '800', whiteSpace: 'nowrap' }}>{left}</span>
             <span style={{ color: rightColor, fontWeight: '800', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{right}</span>
         </div>
-        {sub && <div style={{ color: '#94a3b8', fontSize: '0.6rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
+        {sub && <div style={{ color: subColor, fontSize: '0.6rem', fontWeight: subTone === 'danger' ? '800' : '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
     </div>
     );
 };
