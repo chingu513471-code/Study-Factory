@@ -297,13 +297,13 @@ const SeatCell = ({ value, info }) => {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: 'flex-start',
             fontWeight: '900',
             fontSize: isDoor ? '0.58rem' : '0.58rem',
             boxShadow: isEmpty ? 'none' : 'inset 0 -1px 0 rgba(15,23,42,0.04)',
             userSelect: 'none',
             overflow: 'hidden',
-            padding: isEmpty ? 0 : '1px 3px',
+            padding: isEmpty ? 0 : '0 3px',
             boxSizing: 'border-box',
             lineHeight: 1.06
         }}>
@@ -315,7 +315,7 @@ const SeatCell = ({ value, info }) => {
                         alignItems: 'flex-start',
                         justifyContent: 'center',
                         gap: '2px',
-                        minHeight: '11px',
+                        minHeight: '10px',
                         color: '#134e4a'
                     }}>
                         <span style={{ flexShrink: 0, fontSize: '0.58rem' }}>{value}</span>
@@ -334,7 +334,7 @@ const SeatCell = ({ value, info }) => {
                     {info?.drinks?.length > 0 && (
                         <div style={{
                             width: '100%',
-                            marginTop: '1px',
+                            marginTop: '0',
                             color: '#0f766e',
                             fontWeight: '700',
                             fontSize: '0.48rem',
