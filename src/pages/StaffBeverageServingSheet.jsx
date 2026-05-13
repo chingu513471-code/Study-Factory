@@ -643,7 +643,7 @@ const SeatCell = ({ value, info, onSeatClick }) => {
             boxShadow: isEmpty ? 'none' : 'inset 0 -1px 0 rgba(15,23,42,0.04)',
             userSelect: 'none',
             overflow: 'hidden',
-            padding: isEmpty ? 0 : '0 3px',
+            padding: isEmpty ? 0 : '2px 3px 0',
             boxSizing: 'border-box',
             lineHeight: 1.06,
             cursor: isSeat ? 'pointer' : 'default',
@@ -659,7 +659,7 @@ const SeatCell = ({ value, info, onSeatClick }) => {
                             </span>
                         )}
                     </div>
-                    <div style={{ width: '100%', marginTop: '0', color: isAway ? '#94a3b8' : '#2563eb', fontWeight: '800', fontSize: '0.72rem', lineHeight: 1.05, overflow: 'hidden', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                    <div style={{ width: '100%', marginTop: '1px', color: isAway ? '#94a3b8' : '#2563eb', fontWeight: '800', fontSize: '0.58rem', lineHeight: 1.05, overflow: 'hidden', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                         {isAway ? info.awayReason : info?.drinks?.join(', ')}
                     </div>
                     {info?.note && (
