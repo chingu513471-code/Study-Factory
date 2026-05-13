@@ -487,11 +487,11 @@ const formatLeaveText = (row) => {
 };
 
 const getLeaveTone = (row) => {
-    if (row.type === 'full') return 'blue';
+    if (row.type === 'full') return 'importantLeave';
     const periods = Array.isArray(row.periods) ? row.periods : [];
-    if (row.type === 'half' && periods.includes(1)) return 'blue';
+    if (row.type === 'half' && periods.includes(1)) return 'importantLeave';
     if (row.type === 'half') return 'muted';
-    return periods.includes(1) ? 'blue' : 'muted';
+    return periods.includes(1) ? 'importantLeave' : 'muted';
 };
 
 const sortDrinkSummary = (summaryMap) => {
@@ -549,8 +549,8 @@ const InfoPanel = ({ title, children }) => (
 );
 
 const CompactLine = ({ left, right, sub, tone }) => {
-    const leftColor = tone === 'blue' ? '#2563eb' : tone === 'muted' ? '#94a3b8' : '#64748b';
-    const rightColor = tone === 'blue' ? '#2563eb' : tone === 'muted' ? '#94a3b8' : '#155e63';
+    const leftColor = tone === 'importantLeave' ? '#111827' : tone === 'muted' ? '#cbd5e1' : '#64748b';
+    const rightColor = tone === 'importantLeave' ? '#dc2626' : tone === 'muted' ? '#cbd5e1' : '#155e63';
 
     return (
     <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '2px' }}>
