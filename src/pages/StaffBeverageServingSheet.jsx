@@ -320,13 +320,13 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                 </div>
             </div>
 
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div
                 onTouchStart={(event) => handleDragStart(event.touches[0].clientX)}
                 onTouchEnd={(event) => handleDragEnd(event.changedTouches[0].clientX)}
                 onMouseDown={(event) => handleDragStart(event.clientX)}
                 onMouseUp={(event) => handleDragEnd(event.clientX)}
-                style={{ height: '500px', minHeight: '500px', position: 'relative', overflow: 'hidden', touchAction: 'pan-y', cursor: 'grab' }}
+                style={{ height: '536px', minHeight: '536px', flexShrink: 0, position: 'relative', overflow: 'hidden', touchAction: 'pan-y', cursor: 'grab' }}
             >
                 <div style={{ height: '100%', display: 'flex', transition: 'transform 260ms ease', ...roomTransform }}>
                     {rooms.map((room) => (
@@ -339,7 +339,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                             </div>
 
                             {room.layout.length > 0 ? (
-                                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingBottom: '8px' }}>
+                                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', paddingBottom: '8px' }}>
                                     <SeatGrid layout={room.layout} seatInfoByNumber={seatInfoByNumber} />
                                 </div>
                             ) : (
@@ -399,7 +399,7 @@ const sortDrinkSummary = (summaryMap) => {
 };
 
 const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
-    <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr 0.85fr', gap: '8px', marginTop: '8px', paddingBottom: '8px' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '1.15fr 1fr 0.85fr', gap: '8px', marginTop: '8px', paddingBottom: '8px' }}>
         <InfoPanel title="음료 참고">
             {beverageEvents.length === 0 ? (
                 <EmptyText text="음료 변경 내역 없음" />
@@ -430,7 +430,7 @@ const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
 );
 
 const InfoPanel = ({ title, children }) => (
-    <div style={{ minHeight: '98px', maxHeight: '128px', overflow: 'auto', background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)' }}>
+    <div style={{ height: '100%', minHeight: '120px', overflow: 'auto', background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)', boxSizing: 'border-box' }}>
         <div style={{ fontSize: '0.76rem', fontWeight: '900', color: '#0f172a', marginBottom: '5px' }}>{title}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>{children}</div>
     </div>
