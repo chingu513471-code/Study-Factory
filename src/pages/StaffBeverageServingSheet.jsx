@@ -21,9 +21,24 @@ const ROOM_1_LAYOUT = [
     [17, 15, 13, 11, 9, null, null]
 ];
 
+const ROOM_2_LAYOUT = [
+    [83, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    [82, 81, 80, 79, 84, 85, 86, 87],
+    [78, 77, 76, 75, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    [74, 73, 72, 71, null, 88, 89, 90],
+    [70, 69, 68, 67, null, 91, 92, 93],
+    [null, null, null, null, null, null, null, null],
+    [66, 65, 64, 63, null, 94, 95, 96],
+    [62, 61, 60, 59, null, 97, 98, 99],
+    [null, null, null, null, null, null, null, null],
+    [58, 57, 56, 55, '문', 100, 101, 102]
+];
+
 const rooms = [
     { id: 'room-1', title: '1작업실', layout: ROOM_1_LAYOUT },
-    { id: 'room-2', title: '2작업실', layout: [] }
+    { id: 'room-2', title: '2작업실', layout: ROOM_2_LAYOUT }
 ];
 
 const getVacationAwayReason = (request) => {
@@ -206,7 +221,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
                                 <div style={{ fontSize: '1.06rem', fontWeight: '900', color: '#0f172a' }}>{room.title}</div>
                                 <div style={{ color: '#64748b', fontWeight: '700', fontSize: '0.76rem', paddingRight: '4px' }}>
-                                    {room.layout.length > 0 ? '14 x 7' : '준비 중'}
+                                    {room.layout.length > 0 ? `${room.layout.length} x ${room.layout[0]?.length || 0}` : '준비 중'}
                                 </div>
                             </div>
 
