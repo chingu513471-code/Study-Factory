@@ -568,7 +568,7 @@ const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
                     <span>
                         <span>{item.count}</span>
-                        {item.deduction > 0 && <span style={{ marginLeft: '5px', color: '#dc2626' }}>-{item.deduction}</span>}
+                        {item.deduction > 0 && <span style={{ marginLeft: '5px', color: '#dc2626' }}>(-{item.deduction})</span>}
                     </span>
                 </div>
             ))}
@@ -585,7 +585,7 @@ const InfoPanel = ({ title, children }) => (
 
 const CompactLine = ({ left, right, sub, tone }) => {
     const leftColor = tone === 'importantLeave' ? '#111827' : tone === 'muted' ? '#cbd5e1' : '#64748b';
-    const rightColor = tone === 'importantLeave' ? '#dc2626' : tone === 'muted' ? '#cbd5e1' : '#155e63';
+    const rightColor = tone === 'importantLeave' ? '#155e63' : tone === 'muted' ? '#cbd5e1' : '#155e63';
 
     return (
     <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '2px' }}>
@@ -652,14 +652,14 @@ const SeatCell = ({ value, info, onSeatClick }) => {
             {!isEmpty && !isDoor && (
                 <>
                     <div style={{ width: '100%', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: '2px', minHeight: '10px', color: isAway ? '#64748b' : '#134e4a' }}>
-                        <span style={{ flexShrink: 0, fontSize: '0.52rem' }}>{value}</span>
+                        <span style={{ flexShrink: 0, fontSize: '0.52rem' }}>{value}.</span>
                         {info?.name && (
                             <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.5rem' }}>
                                 {info.name}
                             </span>
                         )}
                     </div>
-                    <div style={{ width: '100%', marginTop: '0', color: isAway ? '#94a3b8' : '#2563eb', fontWeight: '800', fontSize: '0.58rem', lineHeight: 1.05, overflow: 'hidden', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                    <div style={{ width: '100%', marginTop: '0', color: isAway ? '#94a3b8' : '#2563eb', fontWeight: '800', fontSize: '0.72rem', lineHeight: 1.05, overflow: 'hidden', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                         {isAway ? info.awayReason : info?.drinks?.join(', ')}
                     </div>
                     {info?.note && (
