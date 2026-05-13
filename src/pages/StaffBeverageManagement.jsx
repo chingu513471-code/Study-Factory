@@ -38,6 +38,7 @@ const StaffBeverageManagement = ({ onBack }) => {
     const [selectedBranch, setSelectedBranch] = useState('망미점');
     const [beverageOptions, setBeverageOptions] = useState([]);
     const [userSelections, setUserSelections] = useState({});
+    const [requestNotes, setRequestNotes] = useState({});
     const [expandedUser, setExpandedUser] = useState(null);
     const [draftInputs, setDraftInputs] = useState({});
     const [searchTerm, setSearchTerm] = useState('');
@@ -93,20 +94,35 @@ const StaffBeverageManagement = ({ onBack }) => {
 
             if (sortedUsers.length > 0) {
                 const userIds = sortedUsers.map(u => u.id);
-                const { data: selectionData, error: selectionError } = await supabase
+                const [{ data: selectionData, error: selectionError }, { data: requestData, error: requestError }] = await Promise.all([
+                    supabase
                     .from('user_beverage_selections')
                     .select('*')
-                    .in('user_id', userIds);
+                        .in('user_id', userIds),
+                    supabase
+                        .from('new_beverage_requests')
+                        .select('user_id, request_note')
+                        .in('user_id', userIds)
+                ]);
 
                 if (selectionError) throw selectionError;
+                if (requestError) throw requestError;
 
                 const map = {};
                 (selectionData || []).forEach(s => {
                     map[s.user_id] = s;
                 });
                 setUserSelections(map);
+
+                const noteMap = {};
+                (requestData || []).forEach(row => {
+                    const note = normalizeDrinkName(row.request_note);
+                    if (note) noteMap[row.user_id] = note;
+                });
+                setRequestNotes(noteMap);
             } else {
                 setUserSelections({});
+                setRequestNotes({});
             }
         } catch (err) {
             console.error('Error fetching data:', err);
@@ -357,6 +373,7 @@ const StaffBeverageManagement = ({ onBack }) => {
                             const isExpanded = expandedUser === user.id;
                             const selection = userSelections[user.id] || {};
                             const drinkNames = getBeverageNames(selection);
+                            const requestNote = requestNotes[user.id] || '';
                             const summary = drinkNames.length > 0 ? drinkNames.join(', ') : '입력 없음';
                             const isSaving = savingUserId === user.id;
 
@@ -472,6 +489,22 @@ const StaffBeverageManagement = ({ onBack }) => {
                                                     ))
                                                 )}
                                             </div>
+                                            {requestNote && (
+                                                <div style={{
+                                                    marginTop: '12px',
+                                                    padding: '10px',
+                                                    borderRadius: '8px',
+                                                    border: '1px solid #bee3f8',
+                                                    background: '#ebf8ff',
+                                                    color: '#2c5282',
+                                                    fontSize: '0.88rem',
+                                                    lineHeight: 1.45,
+                                                    wordBreak: 'break-word'
+                                                }}>
+                                                    <div style={{ fontWeight: '800', marginBottom: '4px' }}>참고사항</div>
+                                                    <div>{requestNote}</div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
