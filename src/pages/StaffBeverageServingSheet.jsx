@@ -626,11 +626,29 @@ const SeatGrid = ({ layout, seatInfoByNumber, onSeatClick }) => {
     );
 };
 
+const renderSeatDrinkText = (drinks, fallbackColor) => {
+    const normalizedDrinks = Array.isArray(drinks) ? drinks.filter(Boolean) : [];
+    if (normalizedDrinks.length === 0) return '';
+
+    return normalizedDrinks.map((drink, index) => {
+        const isTumblerDrink = String(drink).trim().startsWith('텀');
+        return (
+            <React.Fragment key={`${drink}_${index}`}>
+                {index > 0 ? <span style={{ color: fallbackColor }}>, </span> : null}
+                <span style={{ color: isTumblerDrink ? '#dc2626' : fallbackColor }}>
+                    {drink}
+                </span>
+            </React.Fragment>
+        );
+    });
+};
+
 const SeatCell = ({ value, info, onSeatClick }) => {
     const isDoor = value === '문';
     const isEmpty = value === null;
     const isAway = Boolean(info?.awayReason);
     const isSeat = !isEmpty && !isDoor;
+    const defaultDrinkColor = isAway ? '#94a3b8' : '#2563eb';
 
     return (
         <button
@@ -668,8 +686,8 @@ const SeatCell = ({ value, info, onSeatClick }) => {
                             </span>
                         )}
                     </div>
-                    <div style={{ width: '100%', marginTop: '1px', color: isAway ? '#94a3b8' : '#2563eb', fontWeight: '800', fontSize: '0.58rem', lineHeight: 1.05, overflow: 'hidden', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                        {isAway ? info.awayReason : info?.drinks?.join(', ')}
+                    <div style={{ width: '100%', marginTop: '1px', color: defaultDrinkColor, fontWeight: '800', fontSize: '0.58rem', lineHeight: 1.05, overflow: 'hidden', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                        {isAway ? info.awayReason : renderSeatDrinkText(info?.drinks, defaultDrinkColor)}
                     </div>
                     {info?.note && (
                         <div style={{ width: '100%', marginTop: '1px', color: '#94a3b8', fontWeight: '700', fontSize: '0.43rem', lineHeight: 1.05, overflow: 'hidden', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
