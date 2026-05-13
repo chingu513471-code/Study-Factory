@@ -15,12 +15,15 @@ const getKstTodayString = () => {
 };
 
 const getKstDateStringFromDate = (date) => {
+    const targetDate = date instanceof Date ? date : new Date(date);
+    if (Number.isNaN(targetDate.getTime())) return '';
+
     const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Asia/Seoul',
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
-    }).formatToParts(new Date());
+    }).formatToParts(targetDate);
 
     const map = {};
     parts.forEach((part) => {
@@ -309,9 +312,18 @@ const StaffTaskBoard = ({
                     const pendingIdSet = new Set(notice.pendingIds);
                     const relatedTodos = pendingTodos.filter((t) => pendingIdSet.has(t.pending_registration_id));
                     const allCompleted = relatedTodos.length > 0 && relatedTodos.every((t) => t.status === 'completed');
+                    const completedAtTimes = relatedTodos
+                        .filter((t) => t.status === 'completed' && t.completed_at)
+                        .map((t) => new Date(t.completed_at).getTime())
+                        .filter((time) => Number.isFinite(time));
+                    const latestCompletedAt = completedAtTimes.length > 0
+                        ? new Date(Math.max(...completedAtTimes)).toISOString()
+                        : null;
+
                     return {
                         ...notice,
                         status: allCompleted ? 'completed' : 'pending',
+                        completed_at: allCompleted ? latestCompletedAt : null,
                         pendingTodoIds: relatedTodos.map((t) => t.id)
                     };
                 });
@@ -538,7 +550,7 @@ const StaffTaskBoard = ({
         })
         .filter(task => {
             if (task.status !== 'completed') return true;
-            const completedDate = task.completed_at ? getKstDateStringFromDate(new Date(task.completed_at)) : kstToday;
+            const completedDate = task.completed_at ? getKstDateStringFromDate(task.completed_at) : '';
             return completedDate === kstToday;
         })
         .sort((a, b) => {
