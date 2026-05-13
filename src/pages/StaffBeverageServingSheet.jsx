@@ -1,316 +1,256 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Calendar } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
-import { BRANCH_OPTIONS } from '../constants/branches';
-import EmbeddedCalendar from '../components/EmbeddedCalendar';
-import { formatDateWithDay, getTodayString } from '../utils/dateUtils';
-import { parseBeverageRequestDrinks } from '../utils/beverageRequests';
+import React, { useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+const ROOM_1_LAYOUT = [
+    [54, null, null, null, null, null, null],
+    [53, 52, 51, 50, 49, 48, null],
+    [null, null, null, null, null, null, 7],
+    [47, 46, 45, 44, 43, null, 6],
+    [42, 41, 40, 39, 38, null, 5],
+    [null, null, null, null, null, null, 4],
+    [37, 36, 35, 34, 33, null, 3],
+    [32, 31, 30, 29, 28, null, 2],
+    [null, null, null, null, null, null, 1],
+    [27, 26, 25, 24, 23, null, null],
+    [22, 21, 20, 19, 18, null, null],
+    [null, null, null, null, null, null, null],
+    [16, 14, 12, 10, 8, '문', null],
+    [17, 15, 13, 11, 9, null, null]
+];
+
+const rooms = [
+    { id: 'room-1', title: '1작업실', layout: ROOM_1_LAYOUT },
+    { id: 'room-2', title: '2작업실', layout: [] }
+];
 
 const StaffBeverageServingSheet = ({ onBack }) => {
-    const [loading, setLoading] = useState(true);
-    const [seatData, setSeatData] = useState([]); // Array of { seatNo, user: { name, ... }, status: 'present'|'absent'|'empty', details: ... }
-    const [selectedBranch, setSelectedBranch] = useState('망미점');
-    const [date, setDate] = useState(getTodayString());
-    const [showCalendar, setShowCalendar] = useState(false);
+    const [activeRoomIndex, setActiveRoomIndex] = useState(0);
 
-    const branches = BRANCH_OPTIONS.filter(b => b !== '전체');
+    const activeRoom = rooms[activeRoomIndex];
 
-    useEffect(() => {
-        const updateDate = () => {
-            const today = getTodayString();
-            setDate(today);
-        };
-        window.addEventListener('focus', updateDate);
-        return () => window.removeEventListener('focus', updateDate);
-    }, []);
+    const canGoPrev = activeRoomIndex > 0;
+    const canGoNext = activeRoomIndex < rooms.length - 1;
 
-    useEffect(() => {
-        fetchData();
-    }, [selectedBranch, date]);
-
-    const fetchData = async () => {
-        setLoading(true);
-        try {
-            const today = date;
-
-            // 1. Fetch ALL Users in Branch (Seated only)
-            const { data: userData, error: userError } = await supabase
-                .from('authorized_users')
-                .select('id, name, seat_number')
-                .eq('branch', selectedBranch)
-                .not('seat_number', 'is', null)
-                .order('seat_number', { ascending: true });
-
-            if (userError) throw userError;
-
-            // 2. Fetch unified beverage requests
-            const userIds = (userData || []).map(u => u.id);
-            let requestMap = {};
-            if (userIds.length > 0) {
-                const { data: requestData } = await supabase
-                    .from('new_beverage_requests')
-                    .select('user_id, beverage_1_choice, beverage_2_choice, beverage_2_custom, use_personal_tumbler')
-                    .in('user_id', userIds);
-                (requestData || []).forEach(request => requestMap[request.user_id] = request);
-            }
-
-            // 3. Check Absences (Vacation & Attendance Logs)
-            let absenceMap = {}; // userId -> reason (string)
-
-            if (userIds.length > 0) {
-                // Vacation Requests
-                const { data: vacData } = await supabase
-                    .from('vacation_requests')
-                    .select('user_id, type, periods')
-                    .eq('date', today)
-                    .in('user_id', userIds);
-
-                (vacData || []).forEach(req => {
-                    if (req.type === 'full') absenceMap[req.user_id] = '월차';
-                    else if (req.type === 'half' && req.periods?.includes(1)) absenceMap[req.user_id] = '오전반차'; // Assuming morning absence checks period 1
-                });
-
-                // Attendance Logs (Daily Status like Late, Hospital, etc.)
-                const { data: attData } = await supabase
-                    .from('attendance_logs')
-                    .select('user_id, status, period')
-                    .eq('date', today)
-                    .in('user_id', userIds)
-                    .not('status', 'is', null);
-
-                (attData || []).forEach(log => {
-                    // If marked with a status for period 1, treat as absent/late for serving time
-                    if (log.period === 1) {
-                        // If already has a reason, append or overwrite? Overwrite is usually fine or detail it.
-                        absenceMap[log.user_id] = log.status;
-                    }
-                });
-            }
-
-            // 4. Build Seat Grid
-            // Simple approach: list all seated users + empty slots up to max seat?
-            // "1번부터 좌석 쫙 놓은 다음에" -> Sequential list.
-            const maxSeat = userData && userData.length > 0 ? Math.max(...userData.map(u => u.seat_number)) : 0;
-            const gridLimit = Math.max(maxSeat, 20); // Show at least 20
-
-            const finalData = [];
-            const userSeatMap = {};
-            (userData || []).forEach(u => userSeatMap[u.seat_number] = u);
-
-            for (let i = 1; i <= gridLimit; i++) {
-                const user = userSeatMap[i];
-                if (!user) {
-                    finalData.push({ seatNo: i, status: 'empty' });
-                    continue;
-                }
-
-                const absenceReason = absenceMap[user.id];
-                if (absenceReason) {
-                    finalData.push({
-                        seatNo: i,
-                        status: 'absent',
-                        user,
-                        reason: absenceReason
-                    });
-                } else {
-                    finalData.push({
-                        seatNo: i,
-                        status: 'present',
-                        user,
-                        beverages: parseBeverageRequestDrinks(requestMap[user.id])
-                    });
-                }
-            }
-
-            setSeatData(finalData);
-
-        } catch (err) {
-            console.error(err);
-            alert('데이터 로딩 실패');
-        } finally {
-            setLoading(false);
-        }
-    };
+    const roomTransform = useMemo(() => ({
+        transform: `translateX(-${activeRoomIndex * 100}%)`
+    }), [activeRoomIndex]);
 
     return (
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '0 0 20px 0' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '15px' }}>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 8px 0 0', display: 'flex', alignItems: 'center' }}>
-                        <ChevronLeft size={24} color="#2d3748" />
+        <div style={{
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#f5f7fb',
+            color: '#1f2937',
+            overflow: 'hidden'
+        }}>
+            <div style={{
+                flexShrink: 0,
+                height: '58px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                padding: '0 18px',
+                background: 'white',
+                borderBottom: '1px solid #e2e8f0'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    <button
+                        onClick={onBack}
+                        style={{
+                            width: '40px',
+                            height: '40px',
+                            border: 'none',
+                            borderRadius: '10px',
+                            background: '#f1f5f9',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        <ChevronLeft size={24} color="#334155" />
                     </button>
-                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>음료 서빙표</h3>
+                    <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: '800', whiteSpace: 'nowrap' }}>음료 서빙표</h3>
                 </div>
-                {/* Date Picker Button */}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {rooms.map((room, index) => (
+                        <button
+                            key={room.id}
+                            onClick={() => setActiveRoomIndex(index)}
+                            style={{
+                                padding: '8px 14px',
+                                borderRadius: '999px',
+                                border: activeRoomIndex === index ? 'none' : '1px solid #cbd5e1',
+                                background: activeRoomIndex === index ? '#267E82' : 'white',
+                                color: activeRoomIndex === index ? 'white' : '#64748b',
+                                fontWeight: '800',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                            }}
+                        >
+                            {room.title}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+                <div style={{
+                    height: '100%',
+                    display: 'flex',
+                    transition: 'transform 260ms ease',
+                    ...roomTransform
+                }}>
+                    {rooms.map((room) => (
+                        <section
+                            key={room.id}
+                            style={{
+                                width: '100%',
+                                flex: '0 0 100%',
+                                height: '100%',
+                                padding: '18px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '14px',
+                                overflow: 'hidden'
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+                                <div>
+                                    <div style={{ fontSize: '1.45rem', fontWeight: '900', color: '#0f172a' }}>{room.title}</div>
+                                </div>
+                                <div style={{ color: '#64748b', fontWeight: '700', fontSize: '0.92rem' }}>
+                                    {room.layout.length > 0 ? '14 x 7' : '준비 중'}
+                                </div>
+                            </div>
+
+                            {room.layout.length > 0 ? (
+                                <SeatGrid layout={room.layout} />
+                            ) : (
+                                <div style={{
+                                    flex: 1,
+                                    border: '1px dashed #cbd5e1',
+                                    borderRadius: '16px',
+                                    background: 'rgba(255,255,255,0.72)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#94a3b8',
+                                    fontWeight: '800'
+                                }}>
+                                    2작업실 배치표 준비 중
+                                </div>
+                            )}
+                        </section>
+                    ))}
+                </div>
+
                 <button
-                    onClick={() => setShowCalendar(!showCalendar)}
-                    style={{
-                        padding: '6px 12px',
-                        borderRadius: '12px',
-                        border: '1px solid #e2e8f0',
-                        background: 'white',
-                        display: 'flex', alignItems: 'center', gap: '5px',
-                        fontSize: '0.9rem', fontWeight: 'bold', color: '#2d3748',
-                        cursor: 'pointer'
-                    }}
+                    onClick={() => canGoPrev && setActiveRoomIndex((idx) => idx - 1)}
+                    disabled={!canGoPrev}
+                    style={navButtonStyle('left', !canGoPrev)}
                 >
-                    {formatDateWithDay(date)}
-                    <Calendar size={16} color="#718096" />
+                    <ChevronLeft size={28} />
+                </button>
+                <button
+                    onClick={() => canGoNext && setActiveRoomIndex((idx) => idx + 1)}
+                    disabled={!canGoNext}
+                    style={navButtonStyle('right', !canGoNext)}
+                >
+                    <ChevronRight size={28} />
                 </button>
             </div>
 
-            {showCalendar && (
-                <div style={{ position: 'absolute', top: '60px', right: '20px', zIndex: 100, background: 'white', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', padding: '10px' }}>
-                    <EmbeddedCalendar
-                        selectedDate={date}
-                        onSelectDate={(val) => {
-                            setDate(val);
-                            setShowCalendar(false);
+            <div style={{
+                flexShrink: 0,
+                height: '34px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '7px',
+                background: '#f5f7fb'
+            }}>
+                {rooms.map((room, index) => (
+                    <span
+                        key={room.id}
+                        style={{
+                            width: activeRoomIndex === index ? '22px' : '7px',
+                            height: '7px',
+                            borderRadius: '999px',
+                            background: activeRoomIndex === index ? '#267E82' : '#cbd5e1',
+                            transition: 'all 180ms ease'
                         }}
                     />
-                </div>
-            )}
-
-            {/* Branch Selection */}
-            <div style={{ display: 'flex', gap: '5px', marginBottom: '15px', overflowX: 'auto', paddingBottom: '5px', scrollbarWidth: 'none' }}>
-                {branches.map(b => (
-                    <button
-                        key={b}
-                        onClick={() => setSelectedBranch(b)}
-                        style={{
-                            padding: '6px 12px',
-                            borderRadius: '20px',
-                            border: selectedBranch === b ? 'none' : '1px solid #e2e8f0',
-                            background: selectedBranch === b ? 'var(--color-primary)' : 'white',
-                            color: selectedBranch === b ? 'white' : '#718096',
-                            fontSize: '0.85rem',
-                            fontWeight: 'bold',
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap'
-                        }}
-                    >
-                        {b}
-                    </button>
                 ))}
             </div>
-
-            {/* Grid Content: Single Column */}
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr', // Single column as requested
-                    gap: '8px' // Reduced gap
-                }}>
-                    {seatData.map(item => (
-                        <SeatCard key={item.seatNo} item={item} />
-                    ))}
-                </div>
-                {seatData.length === 0 && !loading && (
-                    <div style={{ textAlign: 'center', padding: '40px', color: '#a0aec0' }}>데이터가 없습니다.</div>
-                )}
-            </div>
         </div>
     );
 };
 
-const SeatCard = ({ item }) => {
-    // Styles based on status
-    let cardStyle = {
-        borderRadius: '8px',
-        padding: '8px 12px',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-        display: 'flex',
-        flexDirection: 'column', // Beverages below header
-        justifyContent: 'center',
-        minHeight: '40px',
-        position: 'relative',
+const SeatGrid = ({ layout }) => (
+    <div style={{
+        flex: 1,
+        minHeight: 0,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(7, minmax(74px, 1fr))',
+        gridTemplateRows: 'repeat(14, minmax(42px, 1fr))',
+        gap: '8px',
+        padding: '12px',
+        borderRadius: '18px',
+        background: 'white',
         border: '1px solid #e2e8f0',
-        background: 'white'
-    };
+        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)'
+    }}>
+        {layout.flatMap((row, rowIndex) => (
+            row.map((cell, colIndex) => (
+                <SeatCell key={`${rowIndex}-${colIndex}`} value={cell} />
+            ))
+        ))}
+    </div>
+);
 
-    // Badge Styles (Oval)
-    let badgeStyle = {
-        fontSize: '0.75rem',
-        padding: '2px 8px',
-        borderRadius: '12px',
-        fontWeight: 'bold',
-        display: 'inline-block',
-        marginLeft: '10px' // Attached to name with small gap
-    };
-
-    // Status Colors
-    if (item.status === 'present') {
-        cardStyle.background = '#f0fff4';
-        cardStyle.border = '1px solid #9ae6b4';
-        badgeStyle.background = '#c6f6d5';
-        badgeStyle.color = '#22543d';
-        badgeStyle.border = '1px solid #48bb78';
-    } else if (item.status === 'absent') {
-        cardStyle.background = '#fff5f5';
-        cardStyle.border = '1px solid #feb2b2';
-        badgeStyle.background = '#fed7d7'; // Light red bg for badge
-        badgeStyle.color = '#9b2c2c'; // Dark red text
-        badgeStyle.border = '1px solid #f56565';
-    } else {
-        cardStyle.background = '#f7fafc';
-        cardStyle.border = '1px solid #edf2f7';
-        badgeStyle.background = '#edf2f7';
-        badgeStyle.color = '#a0aec0';
-        badgeStyle.border = '1px solid #cbd5e0';
-    }
+const SeatCell = ({ value }) => {
+    const isDoor = value === '문';
+    const isEmpty = value === null;
 
     return (
-        <div style={cardStyle}>
-            {/* Header Row: Seat | Name | Badge */}
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{
-                    fontSize: '1rem',
-                    fontWeight: 'bold',
-                    color: item.status === 'empty' ? '#a0aec0' : (item.status === 'present' ? '#2f855a' : '#c53030'),
-                    width: '30px',
-                    textAlign: 'center',
-                    marginRight: '6px'
-                }}>
-                    {item.seatNo}
-                </span>
-
-                {item.status !== 'empty' && (
-                    <>
-                        <span style={{
-                            fontSize: '1rem',
-                            fontWeight: 'bold',
-                            color: '#2d3748'
-                        }}>
-                            {item.user.name}
-                        </span>
-
-                        {/* Status Badge */}
-                        {item.status === 'present' ? (
-                            <span style={{ ...badgeStyle, marginLeft: 'auto' }}>정상출근</span>
-                        ) : (
-                            <span style={{ ...badgeStyle, marginLeft: 'auto' }}>{item.reason}</span>
-                        )}
-                    </>
-                )}
-
-                {item.status === 'empty' && (
-                    <span style={{ fontSize: '0.9rem', color: '#cbd5e0', marginLeft: '10px' }}>미배정</span>
-                )}
-            </div>
-
-            {/* Content: Beverages (Below the header) */}
-            {item.status === 'present' && item.beverages && item.beverages.length > 0 && (
-                <div style={{ marginTop: '4px', paddingLeft: '45px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    {item.beverages.map((bev, idx) => (
-                        <span key={idx} style={{ fontSize: '0.85rem', color: '#276749', fontWeight: '500' }}>
-                            - {bev}
-                        </span>
-                    ))}
-                </div>
-            )}
+        <div style={{
+            borderRadius: '10px',
+            border: isEmpty ? '1px dashed transparent' : isDoor ? '1px solid #94a3b8' : '1px solid #bfd7d8',
+            background: isEmpty ? 'transparent' : isDoor ? '#e2e8f0' : '#f0fdfa',
+            color: isDoor ? '#475569' : '#155e63',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: '900',
+            fontSize: isDoor ? '1rem' : '1.18rem',
+            boxShadow: isEmpty ? 'none' : 'inset 0 -1px 0 rgba(15,23,42,0.04)',
+            userSelect: 'none'
+        }}>
+            {!isEmpty ? value : ''}
         </div>
     );
 };
+
+const navButtonStyle = (side, disabled) => ({
+    position: 'absolute',
+    top: '50%',
+    [side]: '18px',
+    transform: 'translateY(-50%)',
+    width: '46px',
+    height: '46px',
+    borderRadius: '999px',
+    border: '1px solid #dbe3ea',
+    background: disabled ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.92)',
+    color: disabled ? '#cbd5e1' : '#267E82',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    boxShadow: disabled ? 'none' : '0 8px 18px rgba(15, 23, 42, 0.12)'
+});
 
 export default StaffBeverageServingSheet;
