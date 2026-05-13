@@ -52,9 +52,50 @@ const getVacationAwayReason = (request) => {
     return '';
 };
 
+const toKoreanTime = (value) => {
+    if (!value) return '';
+    return new Date(value).toLocaleTimeString('ko-KR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+};
+
+const toKstDateString = (value) => {
+    if (!value) return '';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Seoul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).formatToParts(new Date(value));
+
+    const partMap = {};
+    parts.forEach((part) => {
+        if (part.type !== 'literal') partMap[part.type] = part.value;
+    });
+
+    return `${partMap.year}-${partMap.month}-${partMap.day}`;
+};
+
+const shiftDateString = (dateString, days) => {
+    if (!dateString) return '';
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day + days);
+    const nextYear = date.getFullYear();
+    const nextMonth = String(date.getMonth() + 1).padStart(2, '0');
+    const nextDay = String(date.getDate()).padStart(2, '0');
+    return `${nextYear}-${nextMonth}-${nextDay}`;
+};
+
+const getBeverageDisplayDate = (value) => shiftDateString(toKstDateString(value), 1);
+
 const StaffBeverageServingSheet = ({ onBack }) => {
     const [activeRoomIndex, setActiveRoomIndex] = useState(0);
     const [seatInfoByNumber, setSeatInfoByNumber] = useState({});
+    const [beverageEvents, setBeverageEvents] = useState([]);
+    const [leaveEvents, setLeaveEvents] = useState([]);
+    const [drinkSummary, setDrinkSummary] = useState([]);
     const dragStartXRef = useRef(null);
 
     const roomTransform = useMemo(() => ({
@@ -92,16 +133,18 @@ const StaffBeverageServingSheet = ({ onBack }) => {
             const userIds = (users || []).map((user) => user.id);
             let requestMap = {};
             const awayMap = {};
+            let vacationRows = [];
+            let attendanceRows = [];
 
             if (userIds.length > 0) {
-                const [beverageRes, vacationRes, attendanceRes] = await Promise.all([
+                const [beverageRes, vacationRes, attendanceRes, eventRes] = await Promise.all([
                     supabase
                         .from('new_beverage_requests')
-                        .select('user_id, beverage_1_choice, beverage_2_choice, beverage_2_custom, use_personal_tumbler')
+                        .select('user_id, beverage_1_choice, beverage_2_choice, beverage_2_custom, use_personal_tumbler, created_at, updated_at, request_note')
                         .in('user_id', userIds),
                     supabase
                         .from('vacation_requests')
-                        .select('user_id, type, periods, reason')
+                        .select('id, user_id, type, periods, reason, created_at')
                         .eq('date', today)
                         .in('user_id', userIds),
                     supabase
@@ -110,23 +153,67 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                         .eq('date', today)
                         .eq('period', 1)
                         .in('user_id', userIds)
-                        .not('status', 'is', null)
+                        .not('status', 'is', null),
+                    supabase
+                        .from('new_beverage_requests')
+                        .select(`
+                            user_id,
+                            beverage_1_choice,
+                            beverage_2_choice,
+                            beverage_2_custom,
+                            use_personal_tumbler,
+                            request_note,
+                            created_at,
+                            updated_at,
+                            requester:user_id ( name, seat_number )
+                        `)
+                        .in('user_id', userIds)
+                        .order('updated_at', { ascending: false })
+                        .limit(30)
                 ]);
 
                 if (beverageRes.error) throw beverageRes.error;
                 if (vacationRes.error) throw vacationRes.error;
                 if (attendanceRes.error) throw attendanceRes.error;
+                if (eventRes.error) throw eventRes.error;
 
                 requestMap = Object.fromEntries((beverageRes.data || []).map((request) => [request.user_id, request]));
+                vacationRows = vacationRes.data || [];
+                attendanceRows = attendanceRes.data || [];
 
-                (vacationRes.data || []).forEach((request) => {
+                vacationRows.forEach((request) => {
                     const reason = getVacationAwayReason(request);
                     if (reason) awayMap[request.user_id] = reason;
                 });
 
-                (attendanceRes.data || []).forEach((log) => {
+                attendanceRows.forEach((log) => {
                     if (log.status) awayMap[log.user_id] = log.status;
                 });
+
+                setBeverageEvents((eventRes.data || [])
+                    .map((row) => {
+                        const drinks = parseBeverageRequestDrinks(row);
+                        const createdDisplayDate = getBeverageDisplayDate(row.created_at);
+                        const updatedDisplayDate = getBeverageDisplayDate(row.updated_at);
+                        const createdAtMs = row.created_at ? new Date(row.created_at).getTime() : 0;
+                        const updatedAtMs = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+                        const isChangedToday = updatedDisplayDate === today && (createdDisplayDate !== today || Math.abs(updatedAtMs - createdAtMs) > 1000);
+                        const eventTime = isChangedToday ? row.updated_at : row.created_at;
+
+                        return {
+                            id: `${row.user_id}_${eventTime || updatedAtMs || createdAtMs}`,
+                            createdAt: eventTime || '',
+                            displayDate: isChangedToday ? updatedDisplayDate : createdDisplayDate,
+                            time: toKoreanTime(eventTime),
+                            name: row.requester?.name || '회원',
+                            seatNumber: row.requester?.seat_number,
+                            action: isChangedToday ? '변경' : '신청',
+                            text: drinks.length > 0 ? drinks.join(', ') : '안먹음',
+                            note: row.request_note || ''
+                        };
+                    })
+                    .filter((row) => row.displayDate === today)
+                    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)));
             }
 
             const nextSeatInfo = {};
@@ -138,6 +225,31 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                 };
             });
             setSeatInfoByNumber(nextSeatInfo);
+
+            const userById = Object.fromEntries((users || []).map((user) => [user.id, user]));
+            const nextLeaveEvents = vacationRows
+                .map((row) => {
+                    const user = userById[row.user_id] || {};
+                    return {
+                        id: row.id,
+                        createdAt: row.created_at || '',
+                        time: toKoreanTime(row.created_at),
+                        name: user.name || '회원',
+                        seatNumber: user.seat_number,
+                        text: formatLeaveText(row)
+                    };
+                })
+                .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+            setLeaveEvents(nextLeaveEvents);
+
+            const summaryMap = {};
+            (users || []).forEach((user) => {
+                if (awayMap[user.id]) return;
+                parseBeverageRequestDrinks(requestMap[user.id]).forEach((drink) => {
+                    summaryMap[drink] = (summaryMap[drink] || 0) + 1;
+                });
+            });
+            setDrinkSummary(sortDrinkSummary(summaryMap));
         } catch (error) {
             console.error('Error fetching serving seat info:', error);
         }
@@ -208,12 +320,13 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                 </div>
             </div>
 
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
             <div
                 onTouchStart={(event) => handleDragStart(event.touches[0].clientX)}
                 onTouchEnd={(event) => handleDragEnd(event.changedTouches[0].clientX)}
                 onMouseDown={(event) => handleDragStart(event.clientX)}
                 onMouseUp={(event) => handleDragEnd(event.clientX)}
-                style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', touchAction: 'pan-y', cursor: 'grab' }}
+                style={{ height: '500px', minHeight: '500px', position: 'relative', overflow: 'hidden', touchAction: 'pan-y', cursor: 'grab' }}
             >
                 <div style={{ height: '100%', display: 'flex', transition: 'transform 260ms ease', ...roomTransform }}>
                     {rooms.map((room) => (
@@ -239,6 +352,9 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                 </div>
             </div>
 
+            <InfoPanels beverageEvents={beverageEvents} leaveEvents={leaveEvents} drinkSummary={drinkSummary} />
+            </div>
+
             <div style={{ flexShrink: 0, height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', background: 'transparent' }}>
                 {rooms.map((room, index) => (
                     <span
@@ -256,6 +372,83 @@ const StaffBeverageServingSheet = ({ onBack }) => {
         </div>
     );
 };
+
+const formatLeaveText = (row) => {
+    if (row.type === 'full') return '월차';
+    const periods = Array.isArray(row.periods) ? row.periods : [];
+    if (row.type === 'half') {
+        return periods.includes(1) ? `오전반차 ${periods.join(',')}교시` : `오후반차 ${periods.join(',')}교시`;
+    }
+    return `${row.reason || '기타휴무'} ${periods.length > 0 ? `${periods.join(',')}교시` : ''}`.trim();
+};
+
+const sortDrinkSummary = (summaryMap) => {
+    const priority = ['아아', '선식', '해독주스'];
+    return Object.entries(summaryMap)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => {
+            const aIdx = priority.indexOf(a.name);
+            const bIdx = priority.indexOf(b.name);
+            if (aIdx !== -1 || bIdx !== -1) {
+                if (aIdx === -1) return 1;
+                if (bIdx === -1) return -1;
+                return aIdx - bIdx;
+            }
+            return a.name.localeCompare(b.name, 'ko');
+        });
+};
+
+const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
+    <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr 0.85fr', gap: '8px', marginTop: '8px', paddingBottom: '8px' }}>
+        <InfoPanel title="음료 참고">
+            {beverageEvents.length === 0 ? (
+                <EmptyText text="음료 변경 내역 없음" />
+            ) : beverageEvents.slice(0, 8).map((item) => (
+                <CompactLine key={item.id} left={`${item.time} ${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`} right={`${item.action} · ${item.text}`} sub={item.note} />
+            ))}
+        </InfoPanel>
+
+        <InfoPanel title="오늘 휴무">
+            {leaveEvents.length === 0 ? (
+                <EmptyText text="휴무 신청 없음" />
+            ) : leaveEvents.slice(0, 8).map((item) => (
+                <CompactLine key={item.id} left={`${item.time} ${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`} right={item.text} />
+            ))}
+        </InfoPanel>
+
+        <InfoPanel title="제조 수량">
+            {drinkSummary.length === 0 ? (
+                <EmptyText text="제조할 음료 없음" />
+            ) : drinkSummary.map((item) => (
+                <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '0.72rem', fontWeight: '800', color: '#155e63', lineHeight: 1.35 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                    <span>{item.count}</span>
+                </div>
+            ))}
+        </InfoPanel>
+    </div>
+);
+
+const InfoPanel = ({ title, children }) => (
+    <div style={{ minHeight: '98px', maxHeight: '128px', overflow: 'auto', background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)' }}>
+        <div style={{ fontSize: '0.76rem', fontWeight: '900', color: '#0f172a', marginBottom: '5px' }}>{title}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>{children}</div>
+    </div>
+);
+
+const CompactLine = ({ left, right, sub }) => (
+    <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '2px' }}>
+        <div style={{ display: 'flex', gap: '6px', justifyContent: 'space-between', fontSize: '0.66rem', lineHeight: 1.25 }}>
+            <span style={{ color: '#64748b', fontWeight: '800', whiteSpace: 'nowrap' }}>{left}</span>
+            <span style={{ color: '#155e63', fontWeight: '800', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{right}</span>
+        </div>
+        {sub && <div style={{ color: '#94a3b8', fontSize: '0.6rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
+    </div>
+);
+
+const EmptyText = ({ text }) => (
+    <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: '700' }}>{text}</div>
+);
 
 const SeatGrid = ({ layout, seatInfoByNumber }) => {
     const columnCount = Math.max(...layout.map((row) => row.length));
