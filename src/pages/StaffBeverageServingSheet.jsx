@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
@@ -93,6 +93,20 @@ const shiftDateString = (dateString, days) => {
 
 const getBeverageDisplayDate = (value) => shiftDateString(toKstDateString(value), 1);
 
+const formatShortKoreanDate = (dateString) => {
+    if (!dateString) return '';
+    const [year, month, day] = dateString.split('-').map(Number);
+    if (!year || !month || !day) return '';
+    const weekday = ['일', '월', '화', '수', '목', '금', '토'][new Date(year, month - 1, day).getDay()];
+    return `${month}/${day}(${weekday})`;
+};
+
+const formatEventDateTime = (value, displayDate = null) => {
+    const dateString = displayDate || toKstDateString(value);
+    const time = toKoreanTime(value);
+    return `${formatShortKoreanDate(dateString)} ${time}`.trim();
+};
+
 const StaffBeverageServingSheet = ({ onBack }) => {
     const [activeRoomIndex, setActiveRoomIndex] = useState(0);
     const [seatInfoByNumber, setSeatInfoByNumber] = useState({});
@@ -104,33 +118,15 @@ const StaffBeverageServingSheet = ({ onBack }) => {
     const [editDrinkInput, setEditDrinkInput] = useState('');
     const [editNote, setEditNote] = useState('');
     const [savingSeat, setSavingSeat] = useState(false);
-    const dragStartXRef = useRef(null);
 
     const roomTransform = useMemo(() => ({
         transform: `translateX(-${activeRoomIndex * 100}%)`
     }), [activeRoomIndex]);
 
-    const handleDragStart = (clientX) => {
-        dragStartXRef.current = clientX;
-    };
-
-    const handleDragEnd = (clientX) => {
-        if (dragStartXRef.current === null) return;
-
-        const diff = clientX - dragStartXRef.current;
-        dragStartXRef.current = null;
-
-        if (Math.abs(diff) < 60) return;
-        if (diff < 0) {
-            setActiveRoomIndex((index) => Math.min(index + 1, rooms.length - 1));
-        } else {
-            setActiveRoomIndex((index) => Math.max(index - 1, 0));
-        }
-    };
-
     const fetchSeatInfo = async () => {
         try {
             const today = getTodayString();
+            const beverageDisplayDates = new Set([today, shiftDateString(today, -1), shiftDateString(today, -2)]);
             const { data: users, error: userError } = await supabase
                 .from('authorized_users')
                 .select('id, name, seat_number')
@@ -177,7 +173,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                         `)
                         .in('user_id', userIds)
                         .order('updated_at', { ascending: false })
-                        .limit(30)
+                        .limit(120)
                 ]);
 
                 if (beverageRes.error) throw beverageRes.error;
@@ -199,29 +195,37 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                 });
 
                 setBeverageEvents((eventRes.data || [])
-                    .map((row) => {
+                    .flatMap((row) => {
                         const drinks = parseBeverageRequestDrinks(row);
                         const createdDisplayDate = getBeverageDisplayDate(row.created_at);
                         const updatedDisplayDate = getBeverageDisplayDate(row.updated_at);
                         const createdAtMs = row.created_at ? new Date(row.created_at).getTime() : 0;
                         const updatedAtMs = row.updated_at ? new Date(row.updated_at).getTime() : 0;
-                        const isChangedToday = updatedDisplayDate === today && (createdDisplayDate !== today || Math.abs(updatedAtMs - createdAtMs) > 1000);
-                        const eventTime = isChangedToday ? row.updated_at : row.created_at;
+                        const hasMeaningfulUpdate = row.updated_at && Math.abs(updatedAtMs - createdAtMs) > 1000;
+                        const sources = [
+                            { action: '신청', time: row.created_at, displayDate: createdDisplayDate, sortTime: createdAtMs }
+                        ];
 
-                        return {
-                            id: `${row.user_id}_${eventTime || updatedAtMs || createdAtMs}`,
-                            createdAt: eventTime || '',
-                            displayDate: isChangedToday ? updatedDisplayDate : createdDisplayDate,
-                            time: toKoreanTime(eventTime),
-                            name: row.requester?.name || '회원',
-                            seatNumber: row.requester?.seat_number,
-                            action: isChangedToday ? '변경' : '신청',
-                            text: drinks.length > 0 ? drinks.join(', ') : '안먹음',
-                            note: row.request_note || ''
-                        };
+                        if (hasMeaningfulUpdate) {
+                            sources.push({ action: '변경', time: row.updated_at, displayDate: updatedDisplayDate, sortTime: updatedAtMs });
+                        }
+
+                        return sources
+                            .filter((source) => beverageDisplayDates.has(source.displayDate))
+                            .map((source) => ({
+                                id: `${row.user_id}_${source.action}_${source.time || source.sortTime}`,
+                                createdAt: source.time || '',
+                                sortTime: source.sortTime || 0,
+                                displayDate: source.displayDate,
+                                time: formatEventDateTime(source.time, source.displayDate),
+                                name: row.requester?.name || '회원',
+                                seatNumber: row.requester?.seat_number,
+                                action: source.action,
+                                text: drinks.length > 0 ? drinks.join(', ') : '안먹음',
+                                note: row.request_note || ''
+                            }));
                     })
-                    .filter((row) => row.displayDate === today)
-                    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)));
+                    .sort((a, b) => b.sortTime - a.sortTime));
             }
 
             const nextSeatInfo = {};
@@ -246,10 +250,11 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                     return {
                         id: row.id,
                         createdAt: row.created_at || '',
-                        time: toKoreanTime(row.created_at),
+                        time: formatEventDateTime(row.created_at),
                         name: user.name || '회원',
                         seatNumber: user.seat_number,
-                        text: formatLeaveText(row)
+                        text: formatLeaveText(row),
+                        tone: getLeaveTone(row)
                     };
                 })
                 .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
@@ -408,11 +413,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div
-                onTouchStart={(event) => handleDragStart(event.touches[0].clientX)}
-                onTouchEnd={(event) => handleDragEnd(event.changedTouches[0].clientX)}
-                onMouseDown={(event) => handleDragStart(event.clientX)}
-                onMouseUp={(event) => handleDragEnd(event.clientX)}
-                style={{ height: '536px', minHeight: '536px', flexShrink: 0, position: 'relative', overflow: 'hidden', touchAction: 'pan-y', cursor: 'grab' }}
+                style={{ height: '536px', minHeight: '536px', flexShrink: 0, position: 'relative', overflow: 'hidden' }}
             >
                 <div style={{ height: '100%', display: 'flex', transition: 'transform 260ms ease', ...roomTransform }}>
                     {rooms.map((room) => (
@@ -485,6 +486,14 @@ const formatLeaveText = (row) => {
     return `${row.reason || '기타휴무'} ${periods.length > 0 ? `${periods.join(',')}교시` : ''}`.trim();
 };
 
+const getLeaveTone = (row) => {
+    if (row.type === 'full') return 'blue';
+    const periods = Array.isArray(row.periods) ? row.periods : [];
+    if (row.type === 'half' && periods.includes(1)) return 'blue';
+    if (row.type === 'half') return 'muted';
+    return periods.includes(1) ? 'blue' : 'muted';
+};
+
 const sortDrinkSummary = (summaryMap) => {
     const priority = ['아아', '선식', '해독주스'];
     return Object.entries(summaryMap)
@@ -515,7 +524,7 @@ const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
             {leaveEvents.length === 0 ? (
                 <EmptyText text="휴무 신청 없음" />
             ) : leaveEvents.slice(0, 8).map((item) => (
-                <CompactLine key={item.id} left={`${item.time} ${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`} right={item.text} />
+                <CompactLine key={item.id} left={`${item.time} ${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`} right={item.text} tone={item.tone} />
             ))}
         </InfoPanel>
 
@@ -539,15 +548,20 @@ const InfoPanel = ({ title, children }) => (
     </div>
 );
 
-const CompactLine = ({ left, right, sub }) => (
+const CompactLine = ({ left, right, sub, tone }) => {
+    const leftColor = tone === 'blue' ? '#2563eb' : tone === 'muted' ? '#94a3b8' : '#64748b';
+    const rightColor = tone === 'blue' ? '#2563eb' : tone === 'muted' ? '#94a3b8' : '#155e63';
+
+    return (
     <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '2px' }}>
         <div style={{ display: 'flex', gap: '6px', justifyContent: 'space-between', fontSize: '0.66rem', lineHeight: 1.25 }}>
-            <span style={{ color: '#64748b', fontWeight: '800', whiteSpace: 'nowrap' }}>{left}</span>
-            <span style={{ color: '#155e63', fontWeight: '800', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{right}</span>
+            <span style={{ color: leftColor, fontWeight: '800', whiteSpace: 'nowrap' }}>{left}</span>
+            <span style={{ color: rightColor, fontWeight: '800', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{right}</span>
         </div>
         {sub && <div style={{ color: '#94a3b8', fontSize: '0.6rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
     </div>
-);
+    );
+};
 
 const EmptyText = ({ text }) => (
     <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: '700' }}>{text}</div>
