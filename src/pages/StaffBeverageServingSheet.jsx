@@ -107,6 +107,24 @@ const formatEventDateTime = (value, displayDate = null) => {
     return `${formatShortKoreanDate(dateString)} ${time}`.trim();
 };
 
+const isTodayAfterEight = (value, today) => {
+    if (!value) return false;
+    if (toKstDateString(value) !== today) return false;
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Seoul',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).formatToParts(new Date(value));
+    const timeParts = {};
+    parts.forEach((part) => {
+        if (part.type !== 'literal') timeParts[part.type] = part.value;
+    });
+    const hour = Number(timeParts.hour || 0);
+    const minute = Number(timeParts.minute || 0);
+    return hour > 8 || (hour === 8 && minute >= 0);
+};
+
 const StaffBeverageServingSheet = ({ onBack }) => {
     const [activeRoomIndex, setActiveRoomIndex] = useState(0);
     const [seatInfoByNumber, setSeatInfoByNumber] = useState({});
@@ -137,6 +155,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
             const userIds = (users || []).map((user) => user.id);
             let requestMap = {};
             const awayMap = {};
+            const lateLeaveUserIds = new Set();
             let vacationRows = [];
             let attendanceRows = [];
 
@@ -187,7 +206,12 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 
                 vacationRows.forEach((request) => {
                     const reason = getVacationAwayReason(request);
-                    if (reason) awayMap[request.user_id] = reason;
+                    if (reason) {
+                        awayMap[request.user_id] = reason;
+                        if (isTodayAfterEight(request.created_at, today)) {
+                            lateLeaveUserIds.add(request.user_id);
+                        }
+                    }
                 });
 
                 attendanceRows.forEach((log) => {
@@ -245,6 +269,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 
             const userById = Object.fromEntries((users || []).map((user) => [user.id, user]));
             const nextLeaveEvents = vacationRows
+                .filter((row) => lateLeaveUserIds.has(row.user_id))
                 .map((row) => {
                     const user = userById[row.user_id] || {};
                     return {
@@ -261,13 +286,20 @@ const StaffBeverageServingSheet = ({ onBack }) => {
             setLeaveEvents(nextLeaveEvents);
 
             const summaryMap = {};
+            const lateDeductionMap = {};
             (users || []).forEach((user) => {
-                if (awayMap[user.id]) return;
-                parseBeverageRequestDrinks(requestMap[user.id]).forEach((drink) => {
+                const drinks = parseBeverageRequestDrinks(requestMap[user.id]);
+                if (awayMap[user.id] && !lateLeaveUserIds.has(user.id)) return;
+                drinks.forEach((drink) => {
                     summaryMap[drink] = (summaryMap[drink] || 0) + 1;
                 });
+                if (lateLeaveUserIds.has(user.id)) {
+                    drinks.forEach((drink) => {
+                        lateDeductionMap[drink] = (lateDeductionMap[drink] || 0) + 1;
+                    });
+                }
             });
-            setDrinkSummary(sortDrinkSummary(summaryMap));
+            setDrinkSummary(sortDrinkSummary(summaryMap, lateDeductionMap));
         } catch (error) {
             console.error('Error fetching serving seat info:', error);
         }
@@ -494,10 +526,10 @@ const getLeaveTone = (row) => {
     return periods.includes(1) ? 'importantLeave' : 'muted';
 };
 
-const sortDrinkSummary = (summaryMap) => {
+const sortDrinkSummary = (summaryMap, deductionMap = {}) => {
     const priority = ['아아', '선식', '해독주스'];
     return Object.entries(summaryMap)
-        .map(([name, count]) => ({ name, count }))
+        .map(([name, count]) => ({ name, count, deduction: deductionMap[name] || 0 }))
         .sort((a, b) => {
             const aIdx = priority.indexOf(a.name);
             const bIdx = priority.indexOf(b.name);
@@ -520,9 +552,9 @@ const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
             ))}
         </InfoPanel>
 
-        <InfoPanel title="오늘 휴무">
+        <InfoPanel title="8시 이후 신청 휴무">
             {leaveEvents.length === 0 ? (
-                <EmptyText text="휴무 신청 없음" />
+                <EmptyText text="8시 이후 신청 휴무 없음" />
             ) : leaveEvents.slice(0, 8).map((item) => (
                 <CompactLine key={item.id} left={`${item.time} ${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`} right={item.text} tone={item.tone} />
             ))}
@@ -534,7 +566,10 @@ const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
             ) : drinkSummary.map((item) => (
                 <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '0.72rem', fontWeight: '800', color: '#155e63', lineHeight: 1.35 }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                    <span>{item.count}</span>
+                    <span>
+                        <span>{item.count}</span>
+                        {item.deduction > 0 && <span style={{ marginLeft: '5px', color: '#dc2626' }}>-{item.deduction}</span>}
+                    </span>
                 </div>
             ))}
         </InfoPanel>
@@ -617,14 +652,14 @@ const SeatCell = ({ value, info, onSeatClick }) => {
             {!isEmpty && !isDoor && (
                 <>
                     <div style={{ width: '100%', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: '2px', minHeight: '10px', color: isAway ? '#64748b' : '#134e4a' }}>
-                        <span style={{ flexShrink: 0, fontSize: '0.58rem' }}>{value}</span>
+                        <span style={{ flexShrink: 0, fontSize: '0.52rem' }}>{value}</span>
                         {info?.name && (
-                            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.54rem' }}>
+                            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.5rem' }}>
                                 {info.name}
                             </span>
                         )}
                     </div>
-                    <div style={{ width: '100%', marginTop: '0', color: isAway ? '#94a3b8' : '#0f766e', fontWeight: '700', fontSize: '0.48rem', lineHeight: 1.05, overflow: 'hidden', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                    <div style={{ width: '100%', marginTop: '0', color: isAway ? '#94a3b8' : '#2563eb', fontWeight: '800', fontSize: '0.58rem', lineHeight: 1.05, overflow: 'hidden', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                         {isAway ? info.awayReason : info?.drinks?.join(', ')}
                     </div>
                     {info?.note && (
