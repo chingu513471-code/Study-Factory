@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { getTodayString } from '../utils/dateUtils';
 import { parseBeverageRequestDrinks } from '../utils/beverageRequests';
 
 const ROOM_1_LAYOUT = [
@@ -24,6 +25,17 @@ const rooms = [
     { id: 'room-1', title: '1작업실', layout: ROOM_1_LAYOUT },
     { id: 'room-2', title: '2작업실', layout: [] }
 ];
+
+const getVacationAwayReason = (request) => {
+    if (!request) return '';
+    if (request.type === 'full') return '월차';
+
+    const periods = Array.isArray(request.periods) ? request.periods : [];
+    if (request.type === 'half' && periods.includes(1)) return '오전반차';
+    if (request.type !== 'half' && request.type !== 'full' && periods.includes(1)) return request.reason || '기타휴무';
+
+    return '';
+};
 
 const StaffBeverageServingSheet = ({ onBack }) => {
     const [activeRoomIndex, setActiveRoomIndex] = useState(0);
@@ -54,6 +66,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 
     const fetchSeatInfo = async () => {
         try {
+            const today = getTodayString();
             const { data: users, error: userError } = await supabase
                 .from('authorized_users')
                 .select('id, name, seat_number')
@@ -63,22 +76,50 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 
             const userIds = (users || []).map((user) => user.id);
             let requestMap = {};
+            const awayMap = {};
 
             if (userIds.length > 0) {
-                const { data: requests, error: requestError } = await supabase
-                    .from('new_beverage_requests')
-                    .select('user_id, beverage_1_choice, beverage_2_choice, beverage_2_custom, use_personal_tumbler')
-                    .in('user_id', userIds);
+                const [beverageRes, vacationRes, attendanceRes] = await Promise.all([
+                    supabase
+                        .from('new_beverage_requests')
+                        .select('user_id, beverage_1_choice, beverage_2_choice, beverage_2_custom, use_personal_tumbler')
+                        .in('user_id', userIds),
+                    supabase
+                        .from('vacation_requests')
+                        .select('user_id, type, periods, reason')
+                        .eq('date', today)
+                        .in('user_id', userIds),
+                    supabase
+                        .from('attendance_logs')
+                        .select('user_id, period, status')
+                        .eq('date', today)
+                        .eq('period', 1)
+                        .in('user_id', userIds)
+                        .not('status', 'is', null)
+                ]);
 
-                if (requestError) throw requestError;
-                requestMap = Object.fromEntries((requests || []).map((request) => [request.user_id, request]));
+                if (beverageRes.error) throw beverageRes.error;
+                if (vacationRes.error) throw vacationRes.error;
+                if (attendanceRes.error) throw attendanceRes.error;
+
+                requestMap = Object.fromEntries((beverageRes.data || []).map((request) => [request.user_id, request]));
+
+                (vacationRes.data || []).forEach((request) => {
+                    const reason = getVacationAwayReason(request);
+                    if (reason) awayMap[request.user_id] = reason;
+                });
+
+                (attendanceRes.data || []).forEach((log) => {
+                    if (log.status) awayMap[log.user_id] = log.status;
+                });
             }
 
             const nextSeatInfo = {};
             (users || []).forEach((user) => {
                 nextSeatInfo[Number(user.seat_number)] = {
                     name: user.name,
-                    drinks: parseBeverageRequestDrinks(requestMap[user.id])
+                    drinks: parseBeverageRequestDrinks(requestMap[user.id]),
+                    awayReason: awayMap[user.id] || ''
                 };
             });
             setSeatInfoByNumber(nextSeatInfo);
@@ -95,6 +136,16 @@ const StaffBeverageServingSheet = ({ onBack }) => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'new_beverage_requests' }, fetchSeatInfo)
             .subscribe();
 
+        const vacationChannel = supabase
+            .channel('serving_sheet_vacations')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'vacation_requests' }, fetchSeatInfo)
+            .subscribe();
+
+        const attendanceChannel = supabase
+            .channel('serving_sheet_attendance')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs' }, fetchSeatInfo)
+            .subscribe();
+
         const userChannel = supabase
             .channel('serving_sheet_users')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'authorized_users' }, fetchSeatInfo)
@@ -102,45 +153,17 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 
         return () => {
             requestChannel.unsubscribe();
+            vacationChannel.unsubscribe();
+            attendanceChannel.unsubscribe();
             userChannel.unsubscribe();
         };
     }, []);
 
     return (
-        <div style={{
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            background: 'transparent',
-            color: '#1f2937',
-            overflow: 'hidden'
-        }}>
-            <div style={{
-                flexShrink: 0,
-                minHeight: '46px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '12px',
-                padding: '0 4px 10px 0',
-                background: 'transparent',
-                borderBottom: '1px solid #e2e8f0'
-            }}>
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'transparent', color: '#1f2937', overflow: 'hidden' }}>
+            <div style={{ flexShrink: 0, minHeight: '46px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '0 4px 10px 0', background: 'transparent', borderBottom: '1px solid #e2e8f0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                    <button
-                        onClick={onBack}
-                        style={{
-                            width: '34px',
-                            height: '34px',
-                            border: 'none',
-                            borderRadius: '9px',
-                            background: '#f1f5f9',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer'
-                        }}
-                    >
+                    <button onClick={onBack} style={{ width: '34px', height: '34px', border: 'none', borderRadius: '9px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                         <ChevronLeft size={21} color="#334155" />
                     </button>
                     <h3 style={{ margin: 0, fontSize: '1.02rem', fontWeight: '800', whiteSpace: 'nowrap' }}>음료 서빙표</h3>
@@ -175,35 +198,11 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                 onTouchEnd={(event) => handleDragEnd(event.changedTouches[0].clientX)}
                 onMouseDown={(event) => handleDragStart(event.clientX)}
                 onMouseUp={(event) => handleDragEnd(event.clientX)}
-                style={{
-                    flex: 1,
-                    minHeight: 0,
-                    position: 'relative',
-                    overflow: 'hidden',
-                    touchAction: 'pan-y',
-                    cursor: 'grab'
-                }}
+                style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', touchAction: 'pan-y', cursor: 'grab' }}
             >
-                <div style={{
-                    height: '100%',
-                    display: 'flex',
-                    transition: 'transform 260ms ease',
-                    ...roomTransform
-                }}>
+                <div style={{ height: '100%', display: 'flex', transition: 'transform 260ms ease', ...roomTransform }}>
                     {rooms.map((room) => (
-                        <section
-                            key={room.id}
-                            style={{
-                                width: '100%',
-                                flex: '0 0 100%',
-                                height: '100%',
-                                padding: '10px 0 0 0',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '8px',
-                                overflow: 'hidden'
-                            }}
-                        >
+                        <section key={room.id} style={{ width: '100%', flex: '0 0 100%', height: '100%', padding: '10px 0 0 0', display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
                                 <div style={{ fontSize: '1.06rem', fontWeight: '900', color: '#0f172a' }}>{room.title}</div>
                                 <div style={{ color: '#64748b', fontWeight: '700', fontSize: '0.76rem', paddingRight: '4px' }}>
@@ -216,17 +215,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                                     <SeatGrid layout={room.layout} seatInfoByNumber={seatInfoByNumber} />
                                 </div>
                             ) : (
-                                <div style={{
-                                    flex: 1,
-                                    border: '1px dashed #cbd5e1',
-                                    borderRadius: '16px',
-                                    background: 'rgba(255,255,255,0.72)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: '#94a3b8',
-                                    fontWeight: '800'
-                                }}>
+                                <div style={{ flex: 1, border: '1px dashed #cbd5e1', borderRadius: '16px', background: 'rgba(255,255,255,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontWeight: '800' }}>
                                     2작업실 배치표 준비 중
                                 </div>
                             )}
@@ -235,15 +224,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                 </div>
             </div>
 
-            <div style={{
-                flexShrink: 0,
-                height: '34px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '7px',
-                background: 'transparent'
-            }}>
+            <div style={{ flexShrink: 0, height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', background: 'transparent' }}>
                 {rooms.map((room, index) => (
                     <span
                         key={room.id}
@@ -262,19 +243,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 };
 
 const SeatGrid = ({ layout, seatInfoByNumber }) => (
-    <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-        gridTemplateRows: 'repeat(14, 31px)',
-        gap: '3px',
-        padding: '6px',
-        borderRadius: '12px',
-        background: 'white',
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 3px 10px rgba(15, 23, 42, 0.04)',
-        width: '100%',
-        boxSizing: 'border-box'
-    }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gridTemplateRows: 'repeat(14, 31px)', gap: '3px', padding: '6px', borderRadius: '12px', background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 3px 10px rgba(15, 23, 42, 0.04)', width: '100%', boxSizing: 'border-box' }}>
         {layout.flatMap((row, rowIndex) => (
             row.map((cell, colIndex) => (
                 <SeatCell key={`${rowIndex}-${colIndex}`} value={cell} info={seatInfoByNumber[cell]} />
@@ -286,20 +255,21 @@ const SeatGrid = ({ layout, seatInfoByNumber }) => (
 const SeatCell = ({ value, info }) => {
     const isDoor = value === '문';
     const isEmpty = value === null;
+    const isAway = Boolean(info?.awayReason);
 
     return (
         <div style={{
             minWidth: 0,
             borderRadius: '6px',
-            border: isEmpty ? '1px dashed transparent' : isDoor ? '1px solid #94a3b8' : '1px solid #bfd7d8',
-            background: isEmpty ? 'transparent' : isDoor ? '#e2e8f0' : '#f0fdfa',
-            color: isDoor ? '#475569' : '#155e63',
+            border: isEmpty ? '1px dashed transparent' : isDoor ? '1px solid #94a3b8' : isAway ? '1px solid #cbd5e1' : '1px solid #bfd7d8',
+            background: isEmpty ? 'transparent' : isDoor ? '#e2e8f0' : isAway ? '#f1f5f9' : '#f0fdfa',
+            color: isDoor ? '#475569' : isAway ? '#64748b' : '#155e63',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'flex-start',
             fontWeight: '900',
-            fontSize: isDoor ? '0.58rem' : '0.58rem',
+            fontSize: '0.58rem',
             boxShadow: isEmpty ? 'none' : 'inset 0 -1px 0 rgba(15,23,42,0.04)',
             userSelect: 'none',
             overflow: 'hidden',
@@ -309,44 +279,17 @@ const SeatCell = ({ value, info }) => {
         }}>
             {!isEmpty && !isDoor && (
                 <>
-                    <div style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        justifyContent: 'center',
-                        gap: '2px',
-                        minHeight: '10px',
-                        color: '#134e4a'
-                    }}>
+                    <div style={{ width: '100%', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: '2px', minHeight: '10px', color: isAway ? '#64748b' : '#134e4a' }}>
                         <span style={{ flexShrink: 0, fontSize: '0.58rem' }}>{value}</span>
                         {info?.name && (
-                            <span style={{
-                                minWidth: 0,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                fontSize: '0.54rem'
-                            }}>
+                            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.54rem' }}>
                                 {info.name}
                             </span>
                         )}
                     </div>
-                    {info?.drinks?.length > 0 && (
-                        <div style={{
-                            width: '100%',
-                            marginTop: '0',
-                            color: '#0f766e',
-                            fontWeight: '700',
-                            fontSize: '0.48rem',
-                            lineHeight: 1.05,
-                            overflow: 'hidden',
-                            textAlign: 'center',
-                            whiteSpace: 'nowrap',
-                            textOverflow: 'ellipsis'
-                        }}>
-                            {info.drinks.join(', ')}
-                        </div>
-                    )}
+                    <div style={{ width: '100%', marginTop: '0', color: isAway ? '#94a3b8' : '#0f766e', fontWeight: '700', fontSize: '0.48rem', lineHeight: 1.05, overflow: 'hidden', textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                        {isAway ? info.awayReason : info?.drinks?.join(', ')}
+                    </div>
                 </>
             )}
             {isDoor ? value : ''}
