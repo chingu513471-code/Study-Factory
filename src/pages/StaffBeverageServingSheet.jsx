@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { getTodayString } from '../utils/dateUtils';
-import { parseBeverageRequestDrinks } from '../utils/beverageRequests';
+import { buildBeverageRequestPayload, normalizeDrinkName, parseBeverageRequestDrinks } from '../utils/beverageRequests';
+
+const MAX_BEVERAGES = 5;
 
 const ROOM_1_LAYOUT = [
     [54, null, null, null, null, null, null],
@@ -96,6 +98,11 @@ const StaffBeverageServingSheet = ({ onBack }) => {
     const [beverageEvents, setBeverageEvents] = useState([]);
     const [leaveEvents, setLeaveEvents] = useState([]);
     const [drinkSummary, setDrinkSummary] = useState([]);
+    const [selectedSeat, setSelectedSeat] = useState(null);
+    const [editDrinks, setEditDrinks] = useState([]);
+    const [editDrinkInput, setEditDrinkInput] = useState('');
+    const [editNote, setEditNote] = useState('');
+    const [savingSeat, setSavingSeat] = useState(false);
     const dragStartXRef = useRef(null);
 
     const roomTransform = useMemo(() => ({
@@ -218,9 +225,14 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 
             const nextSeatInfo = {};
             (users || []).forEach((user) => {
+                const request = requestMap[user.id];
                 nextSeatInfo[Number(user.seat_number)] = {
+                    userId: user.id,
+                    seatNumber: Number(user.seat_number),
                     name: user.name,
-                    drinks: parseBeverageRequestDrinks(requestMap[user.id]),
+                    drinks: parseBeverageRequestDrinks(request),
+                    note: request?.request_note || '',
+                    request,
                     awayReason: awayMap[user.id] || ''
                 };
             });
@@ -252,6 +264,79 @@ const StaffBeverageServingSheet = ({ onBack }) => {
             setDrinkSummary(sortDrinkSummary(summaryMap));
         } catch (error) {
             console.error('Error fetching serving seat info:', error);
+        }
+    };
+
+    const openSeatPopup = (seatNumber, info) => {
+        if (!seatNumber) return;
+        const nextSeat = {
+            seatNumber,
+            ...(info || {})
+        };
+        setSelectedSeat(nextSeat);
+        setEditDrinks((info?.drinks || []).slice(0, MAX_BEVERAGES));
+        setEditDrinkInput('');
+        setEditNote(info?.note || '');
+    };
+
+    const closeSeatPopup = () => {
+        if (savingSeat) return;
+        setSelectedSeat(null);
+        setEditDrinks([]);
+        setEditDrinkInput('');
+        setEditNote('');
+    };
+
+    const addEditDrink = () => {
+        const values = String(editDrinkInput || '')
+            .split(',')
+            .map(normalizeDrinkName)
+            .filter(Boolean);
+        if (values.length === 0) return;
+
+        setEditDrinks((prev) => Array.from(new Set([...prev, ...values])).slice(0, MAX_BEVERAGES));
+        setEditDrinkInput('');
+    };
+
+    const removeEditDrink = (drinkName) => {
+        setEditDrinks((prev) => prev.filter((name) => name !== drinkName));
+    };
+
+    const saveSeatBeverage = async () => {
+        if (!selectedSeat?.userId) return;
+        setSavingSeat(true);
+        try {
+            const drinks = editDrinks.map(normalizeDrinkName).filter(Boolean);
+            const payload = buildBeverageRequestPayload(selectedSeat.userId, drinks, editNote);
+            const { error } = await supabase
+                .from('new_beverage_requests')
+                .upsert(payload, { onConflict: 'user_id' });
+
+            if (error) throw error;
+
+            setSeatInfoByNumber((prev) => ({
+                ...prev,
+                [selectedSeat.seatNumber]: {
+                    ...(prev[selectedSeat.seatNumber] || {}),
+                    drinks,
+                    note: payload.request_note || '',
+                    request: {
+                        ...(prev[selectedSeat.seatNumber]?.request || {}),
+                        ...payload
+                    }
+                }
+            }));
+            setSelectedSeat((prev) => prev ? { ...prev, drinks, note: payload.request_note || '' } : prev);
+            await fetchSeatInfo();
+            setSelectedSeat(null);
+            setEditDrinks([]);
+            setEditDrinkInput('');
+            setEditNote('');
+        } catch (error) {
+            console.error('Error saving serving sheet beverage:', error);
+            alert(`저장 실패: ${error.message || JSON.stringify(error)}`);
+        } finally {
+            setSavingSeat(false);
         }
     };
 
@@ -340,7 +425,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 
                             {room.layout.length > 0 ? (
                                 <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', paddingBottom: '8px' }}>
-                                    <SeatGrid layout={room.layout} seatInfoByNumber={seatInfoByNumber} />
+                                    <SeatGrid layout={room.layout} seatInfoByNumber={seatInfoByNumber} onSeatClick={openSeatPopup} />
                                 </div>
                             ) : (
                                 <div style={{ flex: 1, border: '1px dashed #cbd5e1', borderRadius: '16px', background: 'rgba(255,255,255,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontWeight: '800' }}>
@@ -369,6 +454,22 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                     />
                 ))}
             </div>
+
+            {selectedSeat && (
+                <SeatEditModal
+                    seat={selectedSeat}
+                    drinks={editDrinks}
+                    drinkInput={editDrinkInput}
+                    note={editNote}
+                    saving={savingSeat}
+                    onChangeDrinkInput={setEditDrinkInput}
+                    onAddDrink={addEditDrink}
+                    onRemoveDrink={removeEditDrink}
+                    onChangeNote={setEditNote}
+                    onClose={closeSeatPopup}
+                    onSave={saveSeatBeverage}
+                />
+            )}
         </div>
     );
 };
@@ -450,7 +551,7 @@ const EmptyText = ({ text }) => (
     <div style={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: '700' }}>{text}</div>
 );
 
-const SeatGrid = ({ layout, seatInfoByNumber }) => {
+const SeatGrid = ({ layout, seatInfoByNumber, onSeatClick }) => {
     const columnCount = Math.max(...layout.map((row) => row.length));
     const rowCount = layout.length;
 
@@ -458,20 +559,25 @@ const SeatGrid = ({ layout, seatInfoByNumber }) => {
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rowCount}, 31px)`, gap: '3px', padding: '6px', borderRadius: '12px', background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 3px 10px rgba(15, 23, 42, 0.04)', width: '100%', boxSizing: 'border-box' }}>
         {layout.flatMap((row, rowIndex) => (
             row.map((cell, colIndex) => (
-                <SeatCell key={`${rowIndex}-${colIndex}`} value={cell} info={seatInfoByNumber[cell]} />
+                <SeatCell key={`${rowIndex}-${colIndex}`} value={cell} info={seatInfoByNumber[cell]} onSeatClick={onSeatClick} />
             ))
         ))}
         </div>
     );
 };
 
-const SeatCell = ({ value, info }) => {
+const SeatCell = ({ value, info, onSeatClick }) => {
     const isDoor = value === '문';
     const isEmpty = value === null;
     const isAway = Boolean(info?.awayReason);
+    const isSeat = !isEmpty && !isDoor;
 
     return (
-        <div style={{
+        <button
+            type="button"
+            onClick={() => isSeat && onSeatClick(value, info)}
+            disabled={!isSeat}
+            style={{
             minWidth: 0,
             borderRadius: '6px',
             border: isEmpty ? '1px dashed transparent' : isDoor ? '1px solid #94a3b8' : isAway ? '1px solid #cbd5e1' : '1px solid #bfd7d8',
@@ -488,7 +594,9 @@ const SeatCell = ({ value, info }) => {
             overflow: 'hidden',
             padding: isEmpty ? 0 : '0 3px',
             boxSizing: 'border-box',
-            lineHeight: 1.06
+            lineHeight: 1.06,
+            cursor: isSeat ? 'pointer' : 'default',
+            appearance: 'none'
         }}>
             {!isEmpty && !isDoor && (
                 <>
@@ -506,8 +614,146 @@ const SeatCell = ({ value, info }) => {
                 </>
             )}
             {isDoor ? value : ''}
-        </div>
+        </button>
     );
 };
+
+const SeatEditModal = ({ seat, drinks, drinkInput, note, saving, onChangeDrinkInput, onAddDrink, onRemoveDrink, onChangeNote, onClose, onSave }) => (
+    <div
+        onClick={onClose}
+        style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            background: 'rgba(15, 23, 42, 0.42)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '18px'
+        }}
+    >
+        <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+                width: 'min(430px, 100%)',
+                maxHeight: '90vh',
+                overflow: 'auto',
+                background: 'white',
+                borderRadius: '14px',
+                border: '1px solid #dbe4ee',
+                boxShadow: '0 18px 45px rgba(15, 23, 42, 0.24)',
+                padding: '16px'
+            }}
+        >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '12px' }}>
+                <div>
+                    <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#64748b' }}>{seat.seatNumber}번 자리</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#0f172a', marginTop: '2px' }}>{seat.name || '등록된 회원 없음'}</div>
+                </div>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={saving}
+                    style={{ border: 'none', background: '#f1f5f9', borderRadius: '8px', padding: '7px 10px', color: '#334155', fontWeight: '900', cursor: saving ? 'not-allowed' : 'pointer' }}
+                >
+                    닫기
+                </button>
+            </div>
+
+            {seat.userId ? (
+                <>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '900', color: '#334155', marginBottom: '6px' }}>음료 입력</label>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                        <input
+                            value={drinkInput}
+                            onChange={(event) => onChangeDrinkInput(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') onAddDrink();
+                            }}
+                            placeholder="음료명을 입력하세요"
+                            disabled={saving || drinks.length >= MAX_BEVERAGES}
+                            style={{
+                                flex: 1,
+                                minWidth: 0,
+                                padding: '10px',
+                                borderRadius: '9px',
+                                border: '1px solid #cbd5e1',
+                                fontSize: '0.95rem',
+                                background: drinks.length >= MAX_BEVERAGES ? '#f1f5f9' : 'white',
+                                outline: 'none'
+                            }}
+                        />
+                        <button
+                            type="button"
+                            onClick={onAddDrink}
+                            disabled={saving || drinks.length >= MAX_BEVERAGES}
+                            style={{
+                                width: '48px',
+                                borderRadius: '9px',
+                                border: 'none',
+                                background: saving || drinks.length >= MAX_BEVERAGES ? '#cbd5e1' : '#267E82',
+                                color: 'white',
+                                fontWeight: '900',
+                                cursor: saving || drinks.length >= MAX_BEVERAGES ? 'not-allowed' : 'pointer'
+                            }}
+                        >
+                            추가
+                        </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                        {drinks.length === 0 ? (
+                            <div style={{ color: '#94a3b8', fontSize: '0.88rem', fontWeight: '800', padding: '8px 0' }}>입력된 음료가 없습니다.</div>
+                        ) : (
+                            drinks.map((name, index) => (
+                                <div key={`${name}_${index}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '9px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '9px' }}>
+                                    <span style={{ color: '#334155', fontWeight: '800', wordBreak: 'break-word' }}>{index + 1}. {name}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => onRemoveDrink(name)}
+                                        disabled={saving}
+                                        style={{ border: 'none', borderRadius: '7px', background: '#fff1f2', color: '#e11d48', padding: '6px 9px', fontWeight: '900', cursor: saving ? 'not-allowed' : 'pointer' }}
+                                    >
+                                        삭제
+                                    </button>
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '900', color: '#334155', margin: '12px 0 6px' }}>참고사항</label>
+                    <textarea
+                        value={note}
+                        onChange={(event) => onChangeNote(event.target.value)}
+                        placeholder="음료 관련 참고사항"
+                        disabled={saving}
+                        style={{ width: '100%', minHeight: '78px', resize: 'vertical', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '10px', fontSize: '0.95rem', outline: 'none', lineHeight: 1.45 }}
+                    />
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={saving}
+                            style={{ padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '9px', background: 'white', color: '#475569', fontWeight: '900', cursor: saving ? 'not-allowed' : 'pointer' }}
+                        >
+                            취소
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onSave}
+                            disabled={saving}
+                            style={{ padding: '10px 16px', border: 'none', borderRadius: '9px', background: saving ? '#94a3b8' : '#267E82', color: 'white', fontWeight: '900', cursor: saving ? 'not-allowed' : 'pointer' }}
+                        >
+                            {saving ? '저장 중' : '저장'}
+                        </button>
+                    </div>
+                </>
+            ) : (
+                <div style={{ padding: '18px 0 4px', color: '#94a3b8', fontWeight: '800', textAlign: 'center' }}>이 자리에 등록된 회원이 없습니다.</div>
+            )}
+        </div>
+    </div>
+);
 
 export default StaffBeverageServingSheet;
