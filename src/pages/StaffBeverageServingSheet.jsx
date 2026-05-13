@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { ChevronLeft } from 'lucide-react';
 
 const ROOM_1_LAYOUT = [
     [54, null, null, null, null, null, null],
@@ -25,15 +25,29 @@ const rooms = [
 
 const StaffBeverageServingSheet = ({ onBack }) => {
     const [activeRoomIndex, setActiveRoomIndex] = useState(0);
-
-    const activeRoom = rooms[activeRoomIndex];
-
-    const canGoPrev = activeRoomIndex > 0;
-    const canGoNext = activeRoomIndex < rooms.length - 1;
+    const dragStartXRef = useRef(null);
 
     const roomTransform = useMemo(() => ({
         transform: `translateX(-${activeRoomIndex * 100}%)`
     }), [activeRoomIndex]);
+
+    const handleDragStart = (clientX) => {
+        dragStartXRef.current = clientX;
+    };
+
+    const handleDragEnd = (clientX) => {
+        if (dragStartXRef.current === null) return;
+
+        const diff = clientX - dragStartXRef.current;
+        dragStartXRef.current = null;
+
+        if (Math.abs(diff) < 60) return;
+        if (diff < 0) {
+            setActiveRoomIndex((index) => Math.min(index + 1, rooms.length - 1));
+        } else {
+            setActiveRoomIndex((index) => Math.max(index - 1, 0));
+        }
+    };
 
     return (
         <div style={{
@@ -97,7 +111,20 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                 </div>
             </div>
 
-            <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+            <div
+                onTouchStart={(event) => handleDragStart(event.touches[0].clientX)}
+                onTouchEnd={(event) => handleDragEnd(event.changedTouches[0].clientX)}
+                onMouseDown={(event) => handleDragStart(event.clientX)}
+                onMouseUp={(event) => handleDragEnd(event.clientX)}
+                style={{
+                    flex: 1,
+                    minHeight: 0,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    touchAction: 'pan-y',
+                    cursor: 'grab'
+                }}
+            >
                 <div style={{
                     height: '100%',
                     display: 'flex',
@@ -119,16 +146,16 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                             }}
                         >
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                                <div>
-                                    <div style={{ fontSize: '1.45rem', fontWeight: '900', color: '#0f172a' }}>{room.title}</div>
-                                </div>
+                                <div style={{ fontSize: '1.45rem', fontWeight: '900', color: '#0f172a' }}>{room.title}</div>
                                 <div style={{ color: '#64748b', fontWeight: '700', fontSize: '0.92rem' }}>
                                     {room.layout.length > 0 ? '14 x 7' : '준비 중'}
                                 </div>
                             </div>
 
                             {room.layout.length > 0 ? (
-                                <SeatGrid layout={room.layout} />
+                                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingBottom: '18px' }}>
+                                    <SeatGrid layout={room.layout} />
+                                </div>
                             ) : (
                                 <div style={{
                                     flex: 1,
@@ -147,21 +174,6 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                         </section>
                     ))}
                 </div>
-
-                <button
-                    onClick={() => canGoPrev && setActiveRoomIndex((idx) => idx - 1)}
-                    disabled={!canGoPrev}
-                    style={navButtonStyle('left', !canGoPrev)}
-                >
-                    <ChevronLeft size={28} />
-                </button>
-                <button
-                    onClick={() => canGoNext && setActiveRoomIndex((idx) => idx + 1)}
-                    disabled={!canGoNext}
-                    style={navButtonStyle('right', !canGoNext)}
-                >
-                    <ChevronRight size={28} />
-                </button>
             </div>
 
             <div style={{
@@ -192,17 +204,17 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 
 const SeatGrid = ({ layout }) => (
     <div style={{
-        flex: 1,
-        minHeight: 0,
         display: 'grid',
-        gridTemplateColumns: 'repeat(7, minmax(74px, 1fr))',
-        gridTemplateRows: 'repeat(14, minmax(42px, 1fr))',
+        gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+        gridTemplateRows: 'repeat(14, 72px)',
         gap: '8px',
         padding: '12px',
         borderRadius: '18px',
         background: 'white',
         border: '1px solid #e2e8f0',
-        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)'
+        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)',
+        width: '100%',
+        boxSizing: 'border-box'
     }}>
         {layout.flatMap((row, rowIndex) => (
             row.map((cell, colIndex) => (
@@ -218,6 +230,7 @@ const SeatCell = ({ value }) => {
 
     return (
         <div style={{
+            minWidth: 0,
             borderRadius: '10px',
             border: isEmpty ? '1px dashed transparent' : isDoor ? '1px solid #94a3b8' : '1px solid #bfd7d8',
             background: isEmpty ? 'transparent' : isDoor ? '#e2e8f0' : '#f0fdfa',
@@ -226,31 +239,14 @@ const SeatCell = ({ value }) => {
             alignItems: 'center',
             justifyContent: 'center',
             fontWeight: '900',
-            fontSize: isDoor ? '1rem' : '1.18rem',
+            fontSize: isDoor ? 'clamp(0.74rem, 1.4vw, 1rem)' : 'clamp(0.82rem, 1.7vw, 1.18rem)',
             boxShadow: isEmpty ? 'none' : 'inset 0 -1px 0 rgba(15,23,42,0.04)',
-            userSelect: 'none'
+            userSelect: 'none',
+            overflow: 'hidden'
         }}>
             {!isEmpty ? value : ''}
         </div>
     );
 };
-
-const navButtonStyle = (side, disabled) => ({
-    position: 'absolute',
-    top: '50%',
-    [side]: '18px',
-    transform: 'translateY(-50%)',
-    width: '46px',
-    height: '46px',
-    borderRadius: '999px',
-    border: '1px solid #dbe3ea',
-    background: disabled ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.92)',
-    color: disabled ? '#cbd5e1' : '#267E82',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    boxShadow: disabled ? 'none' : '0 8px 18px rgba(15, 23, 42, 0.12)'
-});
 
 export default StaffBeverageServingSheet;
