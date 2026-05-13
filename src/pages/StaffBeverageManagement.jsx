@@ -1,27 +1,51 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { ChevronLeft, Plus, Trash2, Settings, X, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, Search, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { BRANCH_OPTIONS } from '../constants/branches';
 
+const MAX_BEVERAGES = 5;
+
+const isNoDrink = (value) => ['안먹음', '없음', '안 먹음'].includes(String(value || '').trim());
+
+const normalizeDrinkName = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+
+const formatNewRequestBeverages = (request) => {
+    const drinks = [];
+    const beverage1 = normalizeDrinkName(request.beverage_1_choice);
+    if (beverage1 && !isNoDrink(beverage1)) {
+        drinks.push(beverage1);
+    }
+
+    const beverage2Choice = normalizeDrinkName(request.beverage_2_choice);
+    if (beverage2Choice && !isNoDrink(beverage2Choice)) {
+        const base = beverage2Choice === '기타'
+            ? normalizeDrinkName(request.beverage_2_custom)
+            : beverage2Choice;
+
+        if (base && !isNoDrink(base)) {
+            drinks.push(request.use_personal_tumbler ? `텀블러 ${base}` : base);
+        }
+    }
+
+    return Array.from(new Set(drinks)).slice(0, MAX_BEVERAGES);
+};
+
 const StaffBeverageManagement = ({ onBack }) => {
-    const [users, setUsers] = useState([]); // List of users with seat_number
+    const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [savingUserId, setSavingUserId] = useState(null);
+    const [syncing, setSyncing] = useState(false);
     const [selectedBranch, setSelectedBranch] = useState('망미점');
     const [beverageOptions, setBeverageOptions] = useState([]);
-    const [userSelections, setUserSelections] = useState({}); // user_id -> { selection_1, ... }
-    const [expandedUser, setExpandedUser] = useState(null); // user_id of expanded row
-
-    // Modal State for Menu Settings
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [newOptionName, setNewOptionName] = useState('');
+    const [userSelections, setUserSelections] = useState({});
+    const [expandedUser, setExpandedUser] = useState(null);
+    const [draftInputs, setDraftInputs] = useState({});
     const [searchTerm, setSearchTerm] = useState('');
 
     const branches = BRANCH_OPTIONS.filter(b => b !== '전체');
 
-    // Filtered Users
     const filteredUsers = users.filter(user => {
-        if (searchTerm && !user.name.includes(searchTerm)) return false;
+        if (searchTerm && !String(user.name || '').includes(searchTerm)) return false;
         return true;
     });
 
@@ -49,36 +73,24 @@ const StaffBeverageManagement = ({ onBack }) => {
     const fetchUsersAndSelections = async () => {
         setLoading(true);
         try {
-            // 1. Fetch Users in Branch
             const { data: userData, error: userError } = await supabase
                 .from('authorized_users')
                 .select('*')
                 .eq('branch', selectedBranch)
-                .order('seat_number', { ascending: true, nullsFirst: false }); // Sort by seat
+                .order('seat_number', { ascending: true, nullsFirst: false });
 
             if (userError) throw userError;
 
-            // 2. Filter & Sort
-            // Show all users. Sort by seat number (ascending), with unseated users at the end.
             const sortedUsers = (userData || []).sort((a, b) => {
                 const seatA = a.seat_number;
                 const seatB = b.seat_number;
-
-                // If both have seats, compare them
                 if (seatA && seatB) return seatA - seatB;
-
-                // If only A has seat, A comes first
                 if (seatA) return -1;
-
-                // If only B has seat, B comes first
                 if (seatB) return 1;
-
-                // If neither has seat, sort by name or keep order
                 return (a.name || '').localeCompare(b.name || '');
             });
             setUsers(sortedUsers);
 
-            // 2. Fetch Selections for these users
             if (sortedUsers.length > 0) {
                 const userIds = sortedUsers.map(u => u.id);
                 const { data: selectionData, error: selectionError } = await supabase
@@ -96,112 +108,201 @@ const StaffBeverageManagement = ({ onBack }) => {
             } else {
                 setUserSelections({});
             }
-
         } catch (err) {
             console.error('Error fetching data:', err);
-            // alert('데이터를 불러오지 못했습니다.'); // Silent fail better for UI polish
         } finally {
             setLoading(false);
         }
     };
 
-    // --- Menu Settings Logic ---
-    const handleAddOption = async () => {
-        if (!newOptionName.trim()) return;
-        try {
+    const getBeverageNames = (selection) => {
+        if (!selection) return [];
+        return Array.from({ length: MAX_BEVERAGES }, (_, index) => {
+            const optId = selection[`selection_${index + 1}`];
+            const opt = beverageOptions.find(o => o.id === optId);
+            return opt?.name || '';
+        }).filter(Boolean);
+    };
+
+    const ensureBeverageOptions = async (names) => {
+        const normalizedNames = Array.from(new Set(names.map(normalizeDrinkName).filter(Boolean)));
+        const optionMap = new Map(beverageOptions.map(option => [option.name, option]));
+        const createdOptions = [];
+
+        for (const name of normalizedNames) {
+            if (optionMap.has(name)) continue;
+
             const { data, error } = await supabase
                 .from('beverage_options')
-                .insert([{ name: newOptionName.trim() }])
-                .select();
+                .insert([{ name }])
+                .select()
+                .single();
 
-            if (error) throw error;
+            if (error) {
+                if (String(error.message || '').includes('duplicate')) {
+                    const { data: existing, error: fetchError } = await supabase
+                        .from('beverage_options')
+                        .select('*')
+                        .eq('name', name)
+                        .single();
+                    if (fetchError) throw fetchError;
+                    optionMap.set(name, existing);
+                    continue;
+                }
+                throw error;
+            }
 
-            setBeverageOptions([...beverageOptions, data[0]]);
-            setNewOptionName('');
-        } catch (err) {
-            console.error(err);
-            alert('추가 실패: 이미 존재하는 이름일 수 있습니다.');
+            optionMap.set(name, data);
+            createdOptions.push(data);
         }
+
+        if (createdOptions.length > 0) {
+            setBeverageOptions(prev => [...prev, ...createdOptions]);
+        }
+
+        return optionMap;
     };
 
-    const handleDeleteOption = async (id) => {
-        if (!confirm('정말 삭제하시겠습니까?')) return;
-        try {
-            const { error } = await supabase
-                .from('beverage_options')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
-            setBeverageOptions(beverageOptions.filter(o => o.id !== id));
-        } catch (err) {
-            console.error(err);
-            alert('삭제 실패');
-        }
-    };
-
-    // --- Selection Logic ---
-    const handleSelectionChange = async (userId, slotIndex, optionId) => {
-        // slotIndex: 1~5
-        const fieldName = `selection_${slotIndex}`;
-        const currentSelection = userSelections[userId] || { user_id: userId };
-
-        // Optimistic Update
-        const updatedSelection = { ...currentSelection, [fieldName]: optionId };
-        setUserSelections(prev => ({ ...prev, [userId]: updatedSelection }));
+    const saveUserBeverages = async (userId, drinkNames) => {
+        const names = Array.from(new Set(drinkNames.map(normalizeDrinkName).filter(Boolean))).slice(0, MAX_BEVERAGES);
+        setSavingUserId(userId);
 
         try {
-            // Upsert
+            const optionMap = await ensureBeverageOptions(names);
+            const nextSelection = { user_id: userId };
+            for (let i = 1; i <= MAX_BEVERAGES; i++) {
+                nextSelection[`selection_${i}`] = names[i - 1] ? optionMap.get(names[i - 1])?.id || null : null;
+            }
+
             const { error } = await supabase
                 .from('user_beverage_selections')
-                .upsert(updatedSelection, { onConflict: 'user_id' });
+                .upsert(nextSelection, { onConflict: 'user_id' });
 
             if (error) throw error;
+
+            setUserSelections(prev => ({ ...prev, [userId]: { ...(prev[userId] || {}), ...nextSelection } }));
         } catch (err) {
             console.error('Update error:', err);
-            const msg = err.message || JSON.stringify(err);
-            if (msg.includes('foreign key constraint')) {
-                alert(`저장 실패: 해당 사원의 프로필 데이터가 누락되었습니다. (User ID: ${userId})`);
-            } else {
-                alert('저장 실패: ' + msg);
+            alert(`저장 실패: ${err.message || JSON.stringify(err)}`);
+        } finally {
+            setSavingUserId(null);
+        }
+    };
+
+    const handleAddDrink = async (userId) => {
+        const input = draftInputs[userId] || '';
+        const nextNames = input
+            .split(',')
+            .map(normalizeDrinkName)
+            .filter(Boolean);
+
+        if (nextNames.length === 0) return;
+
+        const currentNames = getBeverageNames(userSelections[userId]);
+        const merged = Array.from(new Set([...currentNames, ...nextNames])).slice(0, MAX_BEVERAGES);
+        await saveUserBeverages(userId, merged);
+        setDraftInputs(prev => ({ ...prev, [userId]: '' }));
+    };
+
+    const handleRemoveDrink = async (userId, drinkName) => {
+        const nextNames = getBeverageNames(userSelections[userId]).filter(name => name !== drinkName);
+        await saveUserBeverages(userId, nextNames);
+    };
+
+    const handleSyncNewBeverageRequests = async () => {
+        if (!confirm('현재 사원 음료 선택값을 모두 비우고, 새로운 음료 신청 데이터로 다시 반영할까요?')) return;
+
+        setSyncing(true);
+        try {
+            const { data: existingSelections, error: existingError } = await supabase
+                .from('user_beverage_selections')
+                .select('user_id');
+            if (existingError) throw existingError;
+
+            const emptySelectionRows = (existingSelections || []).map(row => {
+                const next = { user_id: row.user_id };
+                for (let i = 1; i <= MAX_BEVERAGES; i++) next[`selection_${i}`] = null;
+                return next;
+            });
+
+            if (emptySelectionRows.length > 0) {
+                const { error: clearError } = await supabase
+                    .from('user_beverage_selections')
+                    .upsert(emptySelectionRows, { onConflict: 'user_id' });
+                if (clearError) throw clearError;
             }
-            // Revert? (Complex, skipping for prototype)
+
+            const { data: requestRows, error: requestError } = await supabase
+                .from('new_beverage_requests')
+                .select('user_id, beverage_1_choice, beverage_2_choice, beverage_2_custom, use_personal_tumbler');
+            if (requestError) throw requestError;
+
+            const requestsWithDrinks = (requestRows || [])
+                .map(row => ({ userId: row.user_id, drinks: formatNewRequestBeverages(row) }))
+                .filter(row => row.userId && row.drinks.length > 0);
+
+            const allDrinkNames = requestsWithDrinks.flatMap(row => row.drinks);
+            const optionMap = await ensureBeverageOptions(allDrinkNames);
+            const syncedRows = requestsWithDrinks.map(row => {
+                const next = { user_id: row.userId };
+                for (let i = 1; i <= MAX_BEVERAGES; i++) {
+                    const name = row.drinks[i - 1];
+                    next[`selection_${i}`] = name ? optionMap.get(name)?.id || null : null;
+                }
+                return next;
+            });
+
+            if (syncedRows.length > 0) {
+                const { error: syncError } = await supabase
+                    .from('user_beverage_selections')
+                    .upsert(syncedRows, { onConflict: 'user_id' });
+                if (syncError) throw syncError;
+            }
+
+            await fetchBeverageOptions();
+            await fetchUsersAndSelections();
+            alert(`새로운 음료 신청 ${syncedRows.length}건을 반영했습니다.`);
+        } catch (err) {
+            console.error('Sync error:', err);
+            alert(`반영 실패: ${err.message || JSON.stringify(err)}`);
+        } finally {
+            setSyncing(false);
         }
     };
 
     return (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '15px' }}>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '15px', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
                     <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px', marginLeft: '-8px', borderRadius: '50%', display: 'flex' }}>
                         <ChevronLeft size={26} color="#2d3748" />
                     </button>
                     <h2 style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: '0 0 0 4px', lineHeight: 1 }}>음료 관리</h2>
                 </div>
                 <button
-                    onClick={() => setIsSettingsOpen(true)}
+                    onClick={handleSyncNewBeverageRequests}
+                    disabled={syncing}
                     style={{
                         padding: '8px 12px',
                         borderRadius: '8px',
-                        background: '#edf2f7',
+                        background: syncing ? '#cbd5e0' : '#267E82',
                         border: 'none',
-                        color: '#4a5568',
+                        color: 'white',
                         fontWeight: 'bold',
-                        fontSize: '0.9rem',
-                        cursor: 'pointer',
+                        fontSize: '0.86rem',
+                        cursor: syncing ? 'not-allowed' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '5px'
+                        gap: '5px',
+                        whiteSpace: 'nowrap'
                     }}
                 >
-                    <Settings size={16} />
-                    음료 메뉴 설정
+                    <RefreshCw size={16} />
+                    {syncing ? '반영 중' : '새 음료신청 반영'}
                 </button>
             </div>
 
-            {/* Branch Selection & Search */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', gap: '10px' }}>
                 <div style={{ display: 'flex', gap: '5px', overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                     {branches.map(b => (
                         <button
@@ -223,8 +324,7 @@ const StaffBeverageManagement = ({ onBack }) => {
                         </button>
                     ))}
                 </div>
-                {/* Name Search Input */}
-                <div style={{ position: 'relative', marginLeft: '10px' }}>
+                <div style={{ position: 'relative', marginLeft: 'auto' }}>
                     <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#a0aec0' }} />
                     <input
                         type="text"
@@ -237,35 +337,28 @@ const StaffBeverageManagement = ({ onBack }) => {
                             border: '1px solid #e2e8f0',
                             fontSize: '0.9rem',
                             outline: 'none',
-                            width: '100px',
+                            width: '105px',
                             background: '#f7fafc'
                         }}
                     />
                 </div>
             </div>
 
-            {/* User List */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
                 {loading ? (
                     <div style={{ textAlign: 'center', color: '#a0aec0', marginTop: '20px' }}>로딩 중...</div>
                 ) : filteredUsers.length === 0 ? (
                     <div style={{ textAlign: 'center', color: '#a0aec0', marginTop: '20px' }}>
-                        {searchTerm ? '검색된 사원이 없습니다.' : '좌석 배정된 사원이 없습니다.'}
+                        {searchTerm ? '검색된 사원이 없습니다.' : '등록된 사원이 없습니다.'}
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {filteredUsers.map(user => {
                             const isExpanded = expandedUser === user.id;
                             const selection = userSelections[user.id] || {};
-
-                            // Create summary string of selections
-                            const selectionNames = [];
-                            [1, 2, 3].forEach(i => {
-                                const optId = selection[`selection_${i}`];
-                                const opt = beverageOptions.find(o => o.id === optId);
-                                if (opt) selectionNames.push(opt.name);
-                            });
-                            const summary = selectionNames.length > 0 ? selectionNames.join(', ') : '선택 없음';
+                            const drinkNames = getBeverageNames(selection);
+                            const summary = drinkNames.length > 0 ? drinkNames.join(', ') : '입력 없음';
+                            const isSaving = savingUserId === user.id;
 
                             return (
                                 <div key={user.id} style={{
@@ -275,7 +368,6 @@ const StaffBeverageManagement = ({ onBack }) => {
                                     overflow: 'hidden',
                                     transition: 'all 0.2s'
                                 }}>
-                                    {/* Header Row */}
                                     <div
                                         onClick={() => setExpandedUser(isExpanded ? null : user.id)}
                                         style={{
@@ -287,20 +379,21 @@ const StaffBeverageManagement = ({ onBack }) => {
                                             background: isExpanded ? '#ebf8ff' : 'white'
                                         }}
                                     >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', minWidth: 0 }}>
                                             <div style={{
                                                 width: '28px', height: '28px',
                                                 background: '#bee3f8', color: '#2b6cb0',
                                                 borderRadius: '8px',
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                fontWeight: 'bold', fontSize: '0.9rem'
+                                                fontWeight: 'bold', fontSize: '0.9rem',
+                                                flexShrink: 0
                                             }}>
                                                 {user.seat_number || '-'}
                                             </div>
-                                            <div>
+                                            <div style={{ minWidth: 0 }}>
                                                 <div style={{ fontWeight: 'bold', color: '#2d3748' }}>{user.name}</div>
                                                 {!isExpanded && (
-                                                    <div style={{ fontSize: '0.85rem', color: '#718096', marginTop: '2px' }}>
+                                                    <div style={{ fontSize: '0.85rem', color: '#718096', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                         {summary}
                                                     </div>
                                                 )}
@@ -309,33 +402,75 @@ const StaffBeverageManagement = ({ onBack }) => {
                                         {isExpanded ? <ChevronUp size={20} color="#3182ce" /> : <ChevronDown size={20} color="#cbd5e0" />}
                                     </div>
 
-                                    {/* Expanded Selection Area */}
                                     {isExpanded && (
                                         <div style={{ padding: '15px', borderTop: '1px solid #e2e8f0', background: '#fcfcfc' }}>
-                                            <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#4a5568', marginBottom: '10px' }}>음료 선택 (최대 3개)</div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                {[1, 2, 3].map(i => (
-                                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                        <span style={{ fontSize: '0.9rem', color: '#a0aec0', width: '20px' }}>{i}.</span>
-                                                        <select
-                                                            value={selection[`selection_${i}`] || ''}
-                                                            onChange={(e) => handleSelectionChange(user.id, i, e.target.value || null)}
-                                                            style={{
-                                                                flex: 1,
-                                                                padding: '8px',
-                                                                borderRadius: '8px',
-                                                                border: '1px solid #cbd5e0',
-                                                                fontSize: '0.95rem',
-                                                                background: 'white'
-                                                            }}
-                                                        >
-                                                            <option value="">(선택 안함)</option>
-                                                            {beverageOptions.map(opt => (
-                                                                <option key={opt.id} value={opt.id}>{opt.name}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                ))}
+                                            <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#4a5568', marginBottom: '10px' }}>음료 입력</div>
+                                            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                                                <input
+                                                    value={draftInputs[user.id] || ''}
+                                                    onChange={(e) => setDraftInputs(prev => ({ ...prev, [user.id]: e.target.value }))}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') handleAddDrink(user.id);
+                                                    }}
+                                                    placeholder="음료명을 입력하세요"
+                                                    disabled={isSaving || drinkNames.length >= MAX_BEVERAGES}
+                                                    style={{
+                                                        flex: 1,
+                                                        minWidth: 0,
+                                                        padding: '10px',
+                                                        borderRadius: '8px',
+                                                        border: '1px solid #cbd5e0',
+                                                        fontSize: '0.95rem',
+                                                        background: drinkNames.length >= MAX_BEVERAGES ? '#edf2f7' : 'white',
+                                                        outline: 'none'
+                                                    }}
+                                                />
+                                                <button
+                                                    onClick={() => handleAddDrink(user.id)}
+                                                    disabled={isSaving || drinkNames.length >= MAX_BEVERAGES}
+                                                    style={{
+                                                        width: '42px',
+                                                        borderRadius: '8px',
+                                                        border: 'none',
+                                                        background: isSaving || drinkNames.length >= MAX_BEVERAGES ? '#cbd5e0' : '#3182ce',
+                                                        color: 'white',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        cursor: isSaving || drinkNames.length >= MAX_BEVERAGES ? 'not-allowed' : 'pointer'
+                                                    }}
+                                                >
+                                                    <Plus size={20} />
+                                                </button>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                                                {drinkNames.length === 0 ? (
+                                                    <div style={{ color: '#a0aec0', fontSize: '0.88rem', padding: '8px 0' }}>입력된 음료가 없습니다.</div>
+                                                ) : (
+                                                    drinkNames.map((name, index) => (
+                                                        <div key={`${name}_${index}`} style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'space-between',
+                                                            gap: '8px',
+                                                            padding: '9px 10px',
+                                                            background: 'white',
+                                                            border: '1px solid #e2e8f0',
+                                                            borderRadius: '8px'
+                                                        }}>
+                                                            <span style={{ color: '#2d3748', fontWeight: '600', wordBreak: 'break-word' }}>
+                                                                {index + 1}. {name}
+                                                            </span>
+                                                            <button
+                                                                onClick={() => handleRemoveDrink(user.id, name)}
+                                                                disabled={isSaving}
+                                                                style={{ background: '#fff5f5', border: 'none', borderRadius: '6px', color: '#e53e3e', padding: '6px', cursor: isSaving ? 'not-allowed' : 'pointer', display: 'flex' }}
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </div>
+                                                    ))
+                                                )}
                                             </div>
                                         </div>
                                     )}
@@ -345,73 +480,6 @@ const StaffBeverageManagement = ({ onBack }) => {
                     </div>
                 )}
             </div>
-
-            {/* Menu Settings Modal */}
-            {isSettingsOpen && createPortal(
-                <div style={{
-                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.5)', zIndex: 9999,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                    <div style={{
-                        background: 'white', width: '90%', maxWidth: '350px',
-                        borderRadius: '16px', padding: '20px',
-                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>음료 메뉴 설정</h3>
-                            <button onClick={() => setIsSettingsOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-                            <input
-                                type="text"
-                                placeholder="새 메뉴 이름"
-                                value={newOptionName}
-                                onChange={(e) => setNewOptionName(e.target.value)}
-                                style={{
-                                    flex: 1, padding: '10px', borderRadius: '8px',
-                                    border: '1px solid #e2e8f0', fontSize: '1rem'
-                                }}
-                            />
-                            <button
-                                onClick={handleAddOption}
-                                style={{
-                                    padding: '10px', borderRadius: '8px',
-                                    background: '#3182ce', color: 'white',
-                                    border: 'none', cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                }}
-                            >
-                                <Plus size={20} />
-                            </button>
-                        </div>
-
-                        <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                            {beverageOptions.map(opt => (
-                                <div key={opt.id} style={{
-                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                    padding: '10px', borderBottom: '1px solid #f7fafc'
-                                }}>
-                                    <span style={{ fontSize: '1rem', color: '#2d3748' }}>{opt.name}</span>
-                                    <button
-                                        onClick={() => handleDeleteOption(opt.id)}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e53e3e', padding: '5px' }}
-                                    >
-                                        <Trash2 size={18} />
-                                    </button>
-                                </div>
-                            ))}
-                            {beverageOptions.length === 0 && (
-                                <div style={{ textAlign: 'center', color: '#a0aec0', padding: '20px' }}>등록된 메뉴가 없습니다.</div>
-                            )}
-                        </div>
-                    </div>
-                </div>,
-                document.body
-            )}
         </div>
     );
 };

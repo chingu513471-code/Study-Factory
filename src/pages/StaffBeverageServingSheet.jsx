@@ -119,7 +119,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                     // Present
                     const sel = selectionMap[user.id] || {};
                     const beverages = [];
-                    [1, 2, 3].forEach(idx => {
+                    [1, 2, 3, 4, 5].forEach(idx => {
                         const optId = sel[`selection_${idx}`];
                         if (optId && optionsMap[optId]) beverages.push(optionsMap[optId]);
                     });
