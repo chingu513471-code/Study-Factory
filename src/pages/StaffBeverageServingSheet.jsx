@@ -111,29 +111,29 @@ const StaffBeverageServingSheet = ({ onBack }) => {
             height: '100%',
             display: 'flex',
             flexDirection: 'column',
-            background: '#f5f7fb',
+            background: 'transparent',
             color: '#1f2937',
             overflow: 'hidden'
         }}>
             <div style={{
                 flexShrink: 0,
-                height: '58px',
+                minHeight: '46px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: '12px',
-                padding: '0 18px',
-                background: 'white',
+                padding: '0 4px 10px 0',
+                background: 'transparent',
                 borderBottom: '1px solid #e2e8f0'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                     <button
                         onClick={onBack}
                         style={{
-                            width: '40px',
-                            height: '40px',
+                            width: '34px',
+                            height: '34px',
                             border: 'none',
-                            borderRadius: '10px',
+                            borderRadius: '9px',
                             background: '#f1f5f9',
                             display: 'flex',
                             alignItems: 'center',
@@ -141,9 +141,9 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                             cursor: 'pointer'
                         }}
                     >
-                        <ChevronLeft size={24} color="#334155" />
+                        <ChevronLeft size={21} color="#334155" />
                     </button>
-                    <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: '800', whiteSpace: 'nowrap' }}>음료 서빙표</h3>
+                    <h3 style={{ margin: 0, fontSize: '1.02rem', fontWeight: '800', whiteSpace: 'nowrap' }}>음료 서빙표</h3>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -153,11 +153,13 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                             onClick={() => setActiveRoomIndex(index)}
                             style={{
                                 padding: '8px 14px',
+                                minHeight: '34px',
                                 borderRadius: '999px',
                                 border: activeRoomIndex === index ? 'none' : '1px solid #cbd5e1',
                                 background: activeRoomIndex === index ? '#267E82' : 'white',
                                 color: activeRoomIndex === index ? 'white' : '#64748b',
                                 fontWeight: '800',
+                                fontSize: '0.86rem',
                                 cursor: 'pointer',
                                 whiteSpace: 'nowrap'
                             }}
@@ -195,22 +197,22 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                                 width: '100%',
                                 flex: '0 0 100%',
                                 height: '100%',
-                                padding: '18px',
+                                padding: '10px 0 0 0',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                gap: '14px',
+                                gap: '8px',
                                 overflow: 'hidden'
                             }}
                         >
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                                <div style={{ fontSize: '1.45rem', fontWeight: '900', color: '#0f172a' }}>{room.title}</div>
-                                <div style={{ color: '#64748b', fontWeight: '700', fontSize: '0.92rem' }}>
+                                <div style={{ fontSize: '1.06rem', fontWeight: '900', color: '#0f172a' }}>{room.title}</div>
+                                <div style={{ color: '#64748b', fontWeight: '700', fontSize: '0.76rem', paddingRight: '4px' }}>
                                     {room.layout.length > 0 ? '14 x 7' : '준비 중'}
                                 </div>
                             </div>
 
                             {room.layout.length > 0 ? (
-                                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingBottom: '18px' }}>
+                                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingBottom: '8px' }}>
                                     <SeatGrid layout={room.layout} seatInfoByNumber={seatInfoByNumber} />
                                 </div>
                             ) : (
@@ -240,7 +242,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '7px',
-                background: '#f5f7fb'
+                background: 'transparent'
             }}>
                 {rooms.map((room, index) => (
                     <span
@@ -263,13 +265,13 @@ const SeatGrid = ({ layout, seatInfoByNumber }) => (
     <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-        gridTemplateRows: 'repeat(14, 50px)',
-        gap: '6px',
-        padding: '10px',
-        borderRadius: '18px',
+        gridTemplateRows: 'repeat(14, 36px)',
+        gap: '4px',
+        padding: '8px',
+        borderRadius: '12px',
         background: 'white',
         border: '1px solid #e2e8f0',
-        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)',
+        boxShadow: '0 3px 10px rgba(15, 23, 42, 0.04)',
         width: '100%',
         boxSizing: 'border-box'
     }}>
@@ -288,7 +290,7 @@ const SeatCell = ({ value, info }) => {
     return (
         <div style={{
             minWidth: 0,
-            borderRadius: '10px',
+            borderRadius: '6px',
             border: isEmpty ? '1px dashed transparent' : isDoor ? '1px solid #94a3b8' : '1px solid #bfd7d8',
             background: isEmpty ? 'transparent' : isDoor ? '#e2e8f0' : '#f0fdfa',
             color: isDoor ? '#475569' : '#155e63',
@@ -297,13 +299,13 @@ const SeatCell = ({ value, info }) => {
             alignItems: 'center',
             justifyContent: 'center',
             fontWeight: '900',
-            fontSize: isDoor ? '0.72rem' : '0.7rem',
+            fontSize: isDoor ? '0.58rem' : '0.58rem',
             boxShadow: isEmpty ? 'none' : 'inset 0 -1px 0 rgba(15,23,42,0.04)',
             userSelect: 'none',
             overflow: 'hidden',
-            padding: isEmpty ? 0 : '4px 5px',
+            padding: isEmpty ? 0 : '2px 4px',
             boxSizing: 'border-box',
-            lineHeight: 1.12
+            lineHeight: 1.06
         }}>
             {!isEmpty && !isDoor && (
                 <>
@@ -312,18 +314,18 @@ const SeatCell = ({ value, info }) => {
                         display: 'flex',
                         alignItems: 'flex-start',
                         justifyContent: 'center',
-                        gap: '3px',
-                        minHeight: '15px',
+                        gap: '2px',
+                        minHeight: '11px',
                         color: '#134e4a'
                     }}>
-                        <span style={{ flexShrink: 0, fontSize: '0.72rem' }}>{value}</span>
+                        <span style={{ flexShrink: 0, fontSize: '0.58rem' }}>{value}</span>
                         {info?.name && (
                             <span style={{
                                 minWidth: 0,
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
-                                fontSize: '0.66rem'
+                                fontSize: '0.54rem'
                             }}>
                                 {info.name}
                             </span>
@@ -332,15 +334,17 @@ const SeatCell = ({ value, info }) => {
                     {info?.drinks?.length > 0 && (
                         <div style={{
                             width: '100%',
-                            marginTop: '2px',
+                            marginTop: '1px',
                             color: '#0f766e',
                             fontWeight: '700',
-                            fontSize: '0.58rem',
-                            lineHeight: 1.12,
+                            fontSize: '0.48rem',
+                            lineHeight: 1.05,
                             overflow: 'hidden',
-                            textAlign: 'center'
+                            textAlign: 'center',
+                            whiteSpace: 'nowrap',
+                            textOverflow: 'ellipsis'
                         }}>
-                            {info.drinks.slice(0, 2).join(', ')}
+                            {info.drinks.join(', ')}
                         </div>
                     )}
                 </>
