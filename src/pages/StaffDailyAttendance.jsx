@@ -1350,14 +1350,13 @@ const StaffDailyAttendance = ({ onBack }) => {
             const startDate = dateStr;
             const endDate = dateStr;
 
-            const [userRes, logRes, vacRes, dailyMemoRes, memberMemoRes, pendingRes, beverageRes, todosRes, suggestionsRes, newBeverageReqRes, staffTaskRes, sideDishRes] = await Promise.all([
+            const [userRes, logRes, vacRes, dailyMemoRes, memberMemoRes, pendingRes, todosRes, suggestionsRes, newBeverageReqRes, staffTaskRes, sideDishRes] = await Promise.all([
                 supabase.from('profiles').select('*').eq('branch', branch).order('seat_number', { ascending: true, nullsLast: true }),
                 supabase.from('attendance_logs').select('id, user_id, date, period, status').gte('date', startDate).lte('date', endDate),
                 supabase.from('vacation_requests').select('*').gte('date', startDate).lte('date', endDate),
                 supabase.from('attendance_memos').select('*').eq('date', dateStr).order('created_at', { ascending: true }),
                 supabase.from('member_memos').select('*').order('created_at', { ascending: true }),
                 supabase.from('pending_registrations').select('*').eq('branch', branch).order('expected_start_date', { ascending: true }),
-                supabase.from('beverage_options').select('id, name'),
                 supabase.from('staff_todos').select('id, pending_registration_id, status').eq('branch', branch).not('pending_registration_id', 'is', null),
                 supabase.from('suggestions').select(`
                     id,
@@ -1393,7 +1392,6 @@ const StaffDailyAttendance = ({ onBack }) => {
             if (userRes.error) throw userRes.error;
             if (logRes.error) throw logRes.error;  // etc...
             if (pendingRes.error) throw pendingRes.error;
-            if (beverageRes.error) throw beverageRes.error;
             if (todosRes.error) throw todosRes.error;
             if (suggestionsRes.error) throw suggestionsRes.error;
             if (staffTaskRes.error) {
@@ -1456,11 +1454,6 @@ const StaffDailyAttendance = ({ onBack }) => {
             });
             setVacationData(vacMap);
 
-            const beverageNameMap = {};
-            (beverageRes.data || []).forEach((opt) => {
-                beverageNameMap[String(opt.id)] = opt.name;
-            });
-
             const todosByPending = {};
             (todosRes.data || []).forEach((todo) => {
                 if (!todo.pending_registration_id) return;
@@ -1519,15 +1512,11 @@ const StaffDailyAttendance = ({ onBack }) => {
             const enrichedIncomingEmployees = (pendingRes.data || []).map((emp) => {
                 const relatedTodos = todosByPending[emp.id] || [];
                 const isChecked = relatedTodos.length > 0 && relatedTodos.every((todo) => todo.status === 'completed');
-                const beverageNames = [emp.selection_1, emp.selection_2, emp.selection_3]
-                    .map((id) => beverageNameMap[String(id)])
-                    .filter(Boolean);
-
                 return {
                     ...emp,
                     isChecked,
                     plaqueText: emp.target_certificate || emp.name,
-                    beverageText: beverageNames.length > 0 ? beverageNames.join(', ') : '-'
+                    beverageText: emp.beverage_drinks || '-'
                 };
             });
             setIncomingEmployees(enrichedIncomingEmployees);

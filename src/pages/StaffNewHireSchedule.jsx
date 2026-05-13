@@ -44,7 +44,6 @@ const StaffNewHireSchedule = ({ onBack }) => {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [pendingEmployees, setPendingEmployees] = useState([]);
     const [todosByPending, setTodosByPending] = useState({});
-    const [beverageMap, setBeverageMap] = useState({});
     const [loading, setLoading] = useState(true);
     const [updatingIds, setUpdatingIds] = useState(new Set());
 
@@ -69,15 +68,13 @@ const StaffNewHireSchedule = ({ onBack }) => {
                 todosQuery = todosQuery.eq('branch', branchFilter);
             }
 
-            const [pendingRes, todoRes, beverageRes] = await Promise.all([
+            const [pendingRes, todoRes] = await Promise.all([
                 pendingQuery,
-                todosQuery,
-                supabase.from('beverage_options').select('id, name')
+                todosQuery
             ]);
 
             if (pendingRes.error) throw pendingRes.error;
             if (todoRes.error) throw todoRes.error;
-            if (beverageRes.error) throw beverageRes.error;
 
             const groupedTodos = {};
             (todoRes.data || []).forEach((todo) => {
@@ -86,14 +83,8 @@ const StaffNewHireSchedule = ({ onBack }) => {
                 groupedTodos[todo.pending_registration_id].push(todo);
             });
 
-            const beverageNameMap = {};
-            (beverageRes.data || []).forEach((item) => {
-                beverageNameMap[String(item.id)] = item.name;
-            });
-
             setPendingEmployees(pendingRes.data || []);
             setTodosByPending(groupedTodos);
-            setBeverageMap(beverageNameMap);
         } catch (error) {
             console.error('Error fetching new hire schedule:', error);
         } finally {
@@ -135,14 +126,10 @@ const StaffNewHireSchedule = ({ onBack }) => {
             .map((emp) => {
                 const relatedTodos = todosByPending[emp.id] || [];
                 const isChecked = relatedTodos.length > 0 && relatedTodos.every((todo) => todo.status === 'completed');
-                const beverageNames = [emp.selection_1, emp.selection_2, emp.selection_3]
-                    .map((id) => beverageMap[String(id)])
-                    .filter(Boolean);
-
                 return {
                     ...emp,
                     isChecked,
-                    beverageText: beverageNames.length > 0 ? beverageNames.join(', ') : '-'
+                    beverageText: emp.beverage_drinks || '-'
                 };
             })
             .sort((a, b) => {
@@ -151,7 +138,7 @@ const StaffNewHireSchedule = ({ onBack }) => {
                 }
                 return (a.seat_number || 9999) - (b.seat_number || 9999);
             });
-    }, [pendingEmployees, todosByPending, beverageMap]);
+    }, [pendingEmployees, todosByPending]);
 
     const hiresByDate = useMemo(() => {
         const grouped = {};

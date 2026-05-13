@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import { BRANCH_OPTIONS } from '../constants/branches';
 import EmbeddedCalendar from '../components/EmbeddedCalendar';
 import { formatDateWithDay, getTodayString } from '../utils/dateUtils';
+import { parseBeverageRequestDrinks } from '../utils/beverageRequests';
 
 const StaffBeverageServingSheet = ({ onBack }) => {
     const [loading, setLoading] = useState(true);
@@ -42,19 +43,15 @@ const StaffBeverageServingSheet = ({ onBack }) => {
 
             if (userError) throw userError;
 
-            // 2. Fetch Beverage Options & Selections
-            const { data: optionsData } = await supabase.from('beverage_options').select('id, name');
-            const optionsMap = {};
-            (optionsData || []).forEach(o => optionsMap[o.id] = o.name);
-
+            // 2. Fetch unified beverage requests
             const userIds = (userData || []).map(u => u.id);
-            let selectionMap = {};
+            let requestMap = {};
             if (userIds.length > 0) {
-                const { data: selectionsData } = await supabase
-                    .from('user_beverage_selections')
-                    .select('*')
+                const { data: requestData } = await supabase
+                    .from('new_beverage_requests')
+                    .select('user_id, beverage_1_choice, beverage_2_choice, beverage_2_custom, use_personal_tumbler')
                     .in('user_id', userIds);
-                (selectionsData || []).forEach(s => selectionMap[s.user_id] = s);
+                (requestData || []).forEach(request => requestMap[request.user_id] = request);
             }
 
             // 3. Check Absences (Vacation & Attendance Logs)
@@ -116,19 +113,11 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                         reason: absenceReason
                     });
                 } else {
-                    // Present
-                    const sel = selectionMap[user.id] || {};
-                    const beverages = [];
-                    [1, 2, 3, 4, 5].forEach(idx => {
-                        const optId = sel[`selection_${idx}`];
-                        if (optId && optionsMap[optId]) beverages.push(optionsMap[optId]);
-                    });
-
                     finalData.push({
                         seatNo: i,
                         status: 'present',
                         user,
-                        beverages
+                        beverages: parseBeverageRequestDrinks(requestMap[user.id])
                     });
                 }
             }

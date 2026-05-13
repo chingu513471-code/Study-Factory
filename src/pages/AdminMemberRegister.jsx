@@ -9,15 +9,13 @@ const AdminMemberRegister = ({ onBack }) => {
     const [branch, setBranch] = useState('망미점');
     const [role, setRole] = useState('member'); // Default to member
     const [seatNumber, setSeatNumber] = useState('');
-    const [selection1, setSelection1] = useState('');
-    const [selection2, setSelection2] = useState('');
-    const [selection3, setSelection3] = useState('');
+    const [beverageDrinks, setBeverageDrinks] = useState('');
+    const [beverageNote, setBeverageNote] = useState('');
     const [memo, setMemo] = useState('');
     const [expectedStartDate, setExpectedStartDate] = useState('');
     const [targetCertificate, setTargetCertificate] = useState('');
 
     const [list, setList] = useState([]);
-    const [beverageOptions, setBeverageOptions] = useState([]);
     const [certOptions, setCertOptions] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -30,7 +28,6 @@ const AdminMemberRegister = ({ onBack }) => {
 
     useEffect(() => {
         fetchList();
-        fetchBeverageOptions();
         fetchCertOptions();
 
         // Real-time subscriptions
@@ -61,13 +58,6 @@ const AdminMemberRegister = ({ onBack }) => {
             pendingChannel.unsubscribe();
         };
     }, []);
-
-    const fetchBeverageOptions = async () => {
-        try {
-            const { data } = await supabase.from('beverage_options').select('*').order('name');
-            setBeverageOptions(data || []);
-        } catch (e) { console.error('Error fetching beverage options:', e); }
-    };
 
     const fetchCertOptions = async () => {
         try {
@@ -133,9 +123,8 @@ const AdminMemberRegister = ({ onBack }) => {
                     branch,
                     role,
                     seat_number: seatNumber ? parseInt(seatNumber) : null,
-                    selection_1: selection1 || null,
-                    selection_2: selection2 || null,
-                    selection_3: selection3 || null,
+                    beverage_drinks: beverageDrinks.trim() || null,
+                    beverage_note: beverageNote.trim() || null,
                     memo: memo.trim() || null,
                     expected_start_date: expectedStartDate || null,
                     target_certificate: targetCertificate.trim() || null
@@ -178,9 +167,8 @@ const AdminMemberRegister = ({ onBack }) => {
 
             setName('');
             setSeatNumber('');
-            setSelection1('');
-            setSelection2('');
-            setSelection3('');
+            setBeverageDrinks('');
+            setBeverageNote('');
             setMemo('');
             setExpectedStartDate('');
             setTargetCertificate('');
@@ -218,9 +206,8 @@ const AdminMemberRegister = ({ onBack }) => {
             seat_number: user.seat_number || '',
             expected_start_date: user.expected_start_date || '',
             target_certificate: user.target_certificate || '',
-            selection_1: user.selection_1,
-            selection_2: user.selection_2,
-            selection_3: user.selection_3,
+            beverage_drinks: user.beverage_drinks || '',
+            beverage_note: user.beverage_note || '',
             memo: user.memo || ''
         });
     };
@@ -246,9 +233,8 @@ const AdminMemberRegister = ({ onBack }) => {
                     seat_number: seatNum,
                     expected_start_date: editPendingForm.expected_start_date || null,
                     target_certificate: editPendingForm.target_certificate || null,
-                    selection_1: editPendingForm.selection_1,
-                    selection_2: editPendingForm.selection_2,
-                    selection_3: editPendingForm.selection_3,
+                    beverage_drinks: editPendingForm.beverage_drinks || null,
+                    beverage_note: editPendingForm.beverage_note || null,
                     memo: editPendingForm.memo || null
                 })
                 .eq('id', id);
@@ -395,25 +381,19 @@ const AdminMemberRegister = ({ onBack }) => {
 
                 <div style={{ marginBottom: '15px' }}>
                     <label style={{ display: 'block', fontSize: '0.9rem', color: '#718096', marginBottom: '5px' }}>음료 설정 (선택사항)</label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-                        {[
-                            { val: selection1, set: setSelection1, label: '1' },
-                            { val: selection2, set: setSelection2, label: '2' },
-                            { val: selection3, set: setSelection3, label: '3' },
-                        ].map((item, idx) => (
-                            <select
-                                key={idx}
-                                value={item.val}
-                                onChange={(e) => item.set(e.target.value)}
-                                style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem', background: 'white' }}
-                            >
-                                <option value="">(선택 안함)</option>
-                                {beverageOptions.map(opt => (
-                                    <option key={opt.id} value={opt.id}>{opt.name}</option>
-                                ))}
-                            </select>
-                        ))}
-                    </div>
+                    <input
+                        type="text"
+                        value={beverageDrinks}
+                        onChange={(e) => setBeverageDrinks(e.target.value)}
+                        placeholder="예: 선식, 텀블러 아아"
+                        style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.95rem', marginBottom: '8px' }}
+                    />
+                    <textarea
+                        value={beverageNote}
+                        onChange={(e) => setBeverageNote(e.target.value)}
+                        placeholder="음료 참고사항"
+                        style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.95rem', resize: 'vertical', minHeight: '58px' }}
+                    />
                 </div>
 
                 <div style={{ marginBottom: '15px' }}>

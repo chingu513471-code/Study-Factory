@@ -1,24 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
-
-const formatBeverage2 = (request) => {
-    if (!request) return '-';
-
-    if (request.beverage_2_choice === '안먹음') {
-        return '안먹음';
-    }
-
-    let value = request.beverage_2_choice === '기타'
-        ? (request.beverage_2_custom || '기타')
-        : request.beverage_2_choice;
-
-    if (request.use_personal_tumbler) {
-        value = `텀블러 ${value}`;
-    }
-
-    return value;
-};
+import { formatBeverageRequestText } from '../utils/beverageRequests';
 
 const cardStyle = {
     background: 'white',
@@ -72,8 +55,7 @@ const StaffNewBeverageRequestList = ({ onBack }) => {
                         name: user.name,
                         seatNumber: user.seat_number,
                         branch: user.branch,
-                        beverage1: row.beverage_1_choice,
-                        beverage2: formatBeverage2(row),
+                        beverageText: formatBeverageRequestText(row),
                         requestNote: row.request_note || '',
                         updatedAt: row.updated_at
                     };
@@ -180,7 +162,7 @@ const StaffNewBeverageRequestList = ({ onBack }) => {
                                             textOverflow: 'ellipsis',
                                             textAlign: 'right'
                                         }}>
-                                            {item.beverage1}, {item.beverage2}
+                                            {item.beverageText}
                                         </div>
                                         {item.requestNote && (
                                             <div style={{

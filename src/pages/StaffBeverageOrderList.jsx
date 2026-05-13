@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import { BRANCH_OPTIONS } from '../constants/branches';
 import EmbeddedCalendar from '../components/EmbeddedCalendar';
 import { formatDateWithDay, getTodayString } from '../utils/dateUtils';
+import { parseBeverageRequestDrinks } from '../utils/beverageRequests';
 
 const StaffBeverageOrderList = ({ onBack }) => {
     const [loading, setLoading] = useState(true);
@@ -44,26 +45,17 @@ const StaffBeverageOrderList = ({ onBack }) => {
             if (userError) throw userError;
             const allUsers = (userData || []).filter(u => u && u.seat_number); // Filter valid users
 
-            // 2. Fetch Beverage Options
-            const { data: optionsData, error: optionsError } = await supabase
-                .from('beverage_options')
-                .select('id, name');
-
-            if (optionsError) throw optionsError;
-            const optionsMap = {}; // id -> name
-            (optionsData || []).forEach(o => optionsMap[o.id] = o.name);
-
-            // 3. Fetch User Selections
+            // 2. Fetch unified beverage requests
             const userIds = allUsers.map(u => u.id);
-            const { data: selectionsData, error: selectionsError } = await supabase
-                .from('user_beverage_selections')
-                .select('user_id, selection_1, selection_2, selection_3, selection_4, selection_5')
+            const { data: requestData, error: requestError } = await supabase
+                .from('new_beverage_requests')
+                .select('user_id, beverage_1_choice, beverage_2_choice, beverage_2_custom, use_personal_tumbler')
                 .in('user_id', userIds);
 
-            if (selectionsError) throw selectionsError;
+            if (requestError) throw requestError;
 
-            const selectionMap = {}; // user_id -> { selection_1, ..., selection_5 }
-            (selectionsData || []).forEach(s => selectionMap[s.user_id] = s);
+            const requestMap = {};
+            (requestData || []).forEach(request => requestMap[request.user_id] = request);
 
             // 4. Fetch Today's Vacation Requests (To exclude absentees)
             // Logic: Exclude if type='full' OR (type='half' AND periods includes 1)
@@ -122,15 +114,7 @@ const StaffBeverageOrderList = ({ onBack }) => {
                     return; // Skip absentee
                 }
 
-                const userSelections = selectionMap[user.id];
-                if (!userSelections) return; // No selection record
-
-                // Iterate through selection_1 to selection_5
-                [1, 2, 3, 4, 5].forEach(i => {
-                    const beverageId = userSelections[`selection_${i}`];
-                    if (!beverageId) return;
-
-                    const beverageName = optionsMap[beverageId];
+                parseBeverageRequestDrinks(requestMap[user.id]).forEach(beverageName => {
                     if (!beverageName) return;
 
                     if (!orderMap[beverageName]) {
@@ -138,9 +122,6 @@ const StaffBeverageOrderList = ({ onBack }) => {
                     }
 
                     orderMap[beverageName].count++;
-                    // Avoid duplicating user name if they ordered same drink twice? 
-                    // Or list them twice? Usually manufacturing list needs total count.
-                    // Let's append formatted name.
                     orderMap[beverageName].users.push(`${user.name} (${user.seat_number})`);
                 });
             });
