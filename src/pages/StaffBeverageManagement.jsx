@@ -410,8 +410,15 @@ const StaffBeverageManagement = ({ onBack }) => {
                                             <div style={{ minWidth: 0 }}>
                                                 <div style={{ fontWeight: 'bold', color: '#2d3748' }}>{user.name}</div>
                                                 {!isExpanded && (
-                                                    <div style={{ fontSize: '0.85rem', color: '#718096', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                        {summary}
+                                                    <div style={{ marginTop: '2px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                        <div style={{ fontSize: '0.85rem', color: drinkNames.length > 0 ? '#718096' : '#a0aec0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {summary}
+                                                        </div>
+                                                        {requestNote && (
+                                                            <div style={{ fontSize: '0.82rem', color: '#2c5282', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                참고사항: {requestNote}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
