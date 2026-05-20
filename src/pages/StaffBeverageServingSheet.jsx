@@ -130,7 +130,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
     const [seatInfoByNumber, setSeatInfoByNumber] = useState({});
     const [beverageEvents, setBeverageEvents] = useState([]);
     const [leaveEvents, setLeaveEvents] = useState([]);
-    const [drinkSummary, setDrinkSummary] = useState([]);
+    const [drinkSummary, setDrinkSummary] = useState({ cup: [], tumbler: [] });
     const [selectedSeat, setSelectedSeat] = useState(null);
     const [editDrinks, setEditDrinks] = useState([]);
     const [editDrinkInput, setEditDrinkInput] = useState('');
@@ -300,7 +300,7 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                     });
                 }
             });
-            setDrinkSummary(sortDrinkSummary(summaryMap, lateDeductionMap));
+            setDrinkSummary(splitDrinkSummary(summaryMap, lateDeductionMap));
         } catch (error) {
             console.error('Error fetching serving seat info:', error);
         }
@@ -527,29 +527,48 @@ const getLeaveTone = (row) => {
     return periods.includes(1) ? 'importantLeave' : 'muted';
 };
 
-const sortDrinkSummary = (summaryMap, deductionMap = {}) => {
+const sortDrinkItems = (items) => {
     const priority = ['아아', '선식', '해독주스'];
-    return Object.entries(summaryMap)
-        .map(([name, count]) => ({ name, count, deduction: deductionMap[name] || 0 }))
-        .sort((a, b) => {
-            const aIdx = priority.indexOf(a.name);
-            const bIdx = priority.indexOf(b.name);
-            if (aIdx !== -1 || bIdx !== -1) {
-                if (aIdx === -1) return 1;
-                if (bIdx === -1) return -1;
-                return aIdx - bIdx;
-            }
-            return a.name.localeCompare(b.name, 'ko');
-        });
+    return items.slice().sort((a, b) => {
+        const aIdx = priority.indexOf(a.name);
+        const bIdx = priority.indexOf(b.name);
+        if (aIdx !== -1 || bIdx !== -1) {
+            if (aIdx === -1) return 1;
+            if (bIdx === -1) return -1;
+            return aIdx - bIdx;
+        }
+        return a.name.localeCompare(b.name, 'ko');
+    });
+};
+
+const sortTumblerItems = (items) => {
+    return items.slice().sort((a, b) => {
+        const aIsTumblerAah = a.name.startsWith('텀블러 아아');
+        const bIsTumblerAah = b.name.startsWith('텀블러 아아');
+        if (aIsTumblerAah !== bIsTumblerAah) return aIsTumblerAah ? -1 : 1;
+        return a.name.localeCompare(b.name, 'ko');
+    });
+};
+
+const splitDrinkSummary = (summaryMap, deductionMap = {}) => {
+    const items = Object.entries(summaryMap).map(([name, count]) => ({ name, count, deduction: deductionMap[name] || 0 }));
+    return {
+        tumbler: sortTumblerItems(items.filter((item) => item.name.startsWith('텀'))),
+        cup: sortDrinkItems(items.filter((item) => !item.name.startsWith('텀')))
+    };
 };
 
 const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
-    <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '1.15fr 1fr 0.85fr', gap: '8px', marginTop: '8px', paddingBottom: '8px' }}>
-        <InfoPanel title="음료 참고">
+    <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', marginTop: '8px', paddingBottom: '8px' }}>
+        <InfoPanel title="음료 수정">
             {beverageEvents.length === 0 ? (
                 <EmptyText text="음료 변경 내역 없음" />
             ) : beverageEvents.slice(0, 8).map((item) => (
-                <CompactLine key={item.id} left={`${item.time} ${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`} right={`${item.action} · ${item.text}`} sub={item.note} />
+                <CompactLine
+                    key={item.id}
+                    left={`${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`}
+                    right={item.action}
+                />
             ))}
         </InfoPanel>
 
@@ -559,19 +578,31 @@ const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
             ) : leaveEvents.slice(0, 8).map((item) => (
                 <CompactLine
                     key={item.id}
-                    left={`${item.time} ${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`}
+                    left={`${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`}
                     right={item.text}
-                    sub={item.drinks.length > 0 ? item.drinks.join(', ') : '음료 없음'}
-                    subTone="danger"
                     tone={item.tone}
                 />
             ))}
         </InfoPanel>
 
-        <InfoPanel title="제조 수량">
-            {drinkSummary.length === 0 ? (
-                <EmptyText text="제조할 음료 없음" />
-            ) : drinkSummary.map((item) => (
+        <InfoPanel title="텀블러 수량">
+            {drinkSummary.tumbler.length === 0 ? (
+                <EmptyText text="텀블러 수량 없음" />
+            ) : drinkSummary.tumbler.map((item) => (
+                <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '0.72rem', fontWeight: '800', color: '#155e63', lineHeight: 1.35 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                    <span>
+                        <span>{item.count}</span>
+                        {item.deduction > 0 && <span style={{ marginLeft: '5px', color: '#dc2626' }}>(-{item.deduction})</span>}
+                    </span>
+                </div>
+            ))}
+        </InfoPanel>
+
+        <InfoPanel title="컵 수량">
+            {drinkSummary.cup.length === 0 ? (
+                <EmptyText text="컵 수량 없음" />
+            ) : drinkSummary.cup.map((item) => (
                 <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '0.72rem', fontWeight: '800', color: '#155e63', lineHeight: 1.35 }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
                     <span>
