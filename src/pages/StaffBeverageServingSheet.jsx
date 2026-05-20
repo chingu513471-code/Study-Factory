@@ -287,20 +287,26 @@ const StaffBeverageServingSheet = ({ onBack }) => {
             setLeaveEvents(nextLeaveEvents);
 
             const summaryMap = {};
-            const lateDeductionMap = {};
             (users || []).forEach((user) => {
                 const drinks = parseBeverageRequestDrinks(requestMap[user.id]);
                 if (awayMap[user.id] && !lateLeaveUserIds.has(user.id)) return;
                 drinks.forEach((drink) => {
-                    summaryMap[drink] = (summaryMap[drink] || 0) + 1;
+                    if (!summaryMap[drink]) {
+                        summaryMap[drink] = { count: 0, deduction: 0, users: [] };
+                    }
+                    summaryMap[drink].count += 1;
+                    summaryMap[drink].users.push(user.name);
                 });
                 if (lateLeaveUserIds.has(user.id)) {
                     drinks.forEach((drink) => {
-                        lateDeductionMap[drink] = (lateDeductionMap[drink] || 0) + 1;
+                        if (!summaryMap[drink]) {
+                            summaryMap[drink] = { count: 0, deduction: 0, users: [] };
+                        }
+                        summaryMap[drink].deduction += 1;
                     });
                 }
             });
-            setDrinkSummary(splitDrinkSummary(summaryMap, lateDeductionMap));
+            setDrinkSummary(splitDrinkSummary(summaryMap));
         } catch (error) {
             console.error('Error fetching serving seat info:', error);
         }
@@ -541,17 +547,27 @@ const sortDrinkItems = (items) => {
     });
 };
 
+const isTumblerAah = (name) => {
+    const compactName = String(name || '').replace(/\s+/g, '');
+    return compactName.startsWith('텀블러아아') || compactName.startsWith('텀아아');
+};
+
 const sortTumblerItems = (items) => {
     return items.slice().sort((a, b) => {
-        const aIsTumblerAah = a.name.startsWith('텀블러 아아');
-        const bIsTumblerAah = b.name.startsWith('텀블러 아아');
+        const aIsTumblerAah = isTumblerAah(a.name);
+        const bIsTumblerAah = isTumblerAah(b.name);
         if (aIsTumblerAah !== bIsTumblerAah) return aIsTumblerAah ? -1 : 1;
         return a.name.localeCompare(b.name, 'ko');
     });
 };
 
-const splitDrinkSummary = (summaryMap, deductionMap = {}) => {
-    const items = Object.entries(summaryMap).map(([name, count]) => ({ name, count, deduction: deductionMap[name] || 0 }));
+const splitDrinkSummary = (summaryMap) => {
+    const items = Object.entries(summaryMap).map(([name, data]) => ({
+        name,
+        count: data.count || 0,
+        deduction: data.deduction || 0,
+        users: data.users || []
+    }));
     return {
         tumbler: sortTumblerItems(items.filter((item) => item.name.startsWith('텀'))),
         cup: sortDrinkItems(items.filter((item) => !item.name.startsWith('텀')))
@@ -559,7 +575,7 @@ const splitDrinkSummary = (summaryMap, deductionMap = {}) => {
 };
 
 const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
-    <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', marginTop: '8px', paddingBottom: '8px' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '0.72fr 1.25fr 0.82fr 1fr', gap: '6px', marginTop: '6px', paddingBottom: '8px' }}>
         <InfoPanel title="음료 수정">
             {beverageEvents.length === 0 ? (
                 <EmptyText text="음료 변경 내역 없음" />
@@ -568,7 +584,16 @@ const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
                     key={item.id}
                     left={`${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`}
                     right={item.action}
+                    compact
                 />
+            ))}
+        </InfoPanel>
+
+        <InfoPanel title="텀블러 수량">
+            {drinkSummary.tumbler.length === 0 ? (
+                <EmptyText text="텀블러 수량 없음" />
+            ) : drinkSummary.tumbler.map((item) => (
+                <DrinkSummaryLine key={item.name} item={item} showUsers />
             ))}
         </InfoPanel>
 
@@ -581,21 +606,8 @@ const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
                     left={`${item.seatNumber ? `${item.seatNumber}번 ` : ''}${item.name}`}
                     right={item.text}
                     tone={item.tone}
+                    compact
                 />
-            ))}
-        </InfoPanel>
-
-        <InfoPanel title="텀블러 수량">
-            {drinkSummary.tumbler.length === 0 ? (
-                <EmptyText text="텀블러 수량 없음" />
-            ) : drinkSummary.tumbler.map((item) => (
-                <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '0.72rem', fontWeight: '800', color: '#155e63', lineHeight: 1.35 }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                    <span>
-                        <span>{item.count}</span>
-                        {item.deduction > 0 && <span style={{ marginLeft: '5px', color: '#dc2626' }}>(-{item.deduction})</span>}
-                    </span>
-                </div>
             ))}
         </InfoPanel>
 
@@ -603,33 +615,48 @@ const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
             {drinkSummary.cup.length === 0 ? (
                 <EmptyText text="컵 수량 없음" />
             ) : drinkSummary.cup.map((item) => (
-                <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '0.72rem', fontWeight: '800', color: '#155e63', lineHeight: 1.35 }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                    <span>
-                        <span>{item.count}</span>
-                        {item.deduction > 0 && <span style={{ marginLeft: '5px', color: '#dc2626' }}>(-{item.deduction})</span>}
-                    </span>
-                </div>
+                <DrinkSummaryLine key={item.name} item={item} />
             ))}
         </InfoPanel>
     </div>
 );
 
 const InfoPanel = ({ title, children }) => (
-    <div style={{ height: '100%', minHeight: '120px', overflow: 'auto', background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)', boxSizing: 'border-box' }}>
+    <div style={{ height: '100%', minHeight: '120px', minWidth: 0, overflow: 'auto', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '7px', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)', boxSizing: 'border-box' }}>
         <div style={{ fontSize: '0.76rem', fontWeight: '900', color: '#0f172a', marginBottom: '5px' }}>{title}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>{children}</div>
     </div>
 );
 
-const CompactLine = ({ left, right, sub, subTone, tone }) => {
+const DrinkSummaryLine = ({ item, showUsers = false }) => (
+    <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: showUsers ? '5px' : '2px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px', fontSize: '0.72rem', fontWeight: '900', color: '#155e63', lineHeight: 1.35 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+            <span style={{ whiteSpace: 'nowrap' }}>
+                <span>{item.count}</span>
+                {item.deduction > 0 && <span style={{ marginLeft: '4px', color: '#dc2626' }}>(-{item.deduction})</span>}
+            </span>
+        </div>
+        {showUsers && item.users.length > 0 && (
+            <div style={{ marginTop: '3px', display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                {item.users.map((name, index) => (
+                    <span key={`${item.name}_${name}_${index}`} style={{ color: '#64748b', fontSize: '0.66rem', fontWeight: '800', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {name}
+                    </span>
+                ))}
+            </div>
+        )}
+    </div>
+);
+
+const CompactLine = ({ left, right, sub, subTone, tone, compact = false }) => {
     const leftColor = tone === 'importantLeave' ? '#111827' : tone === 'muted' ? '#cbd5e1' : '#64748b';
     const rightColor = tone === 'importantLeave' ? '#155e63' : tone === 'muted' ? '#cbd5e1' : '#155e63';
     const subColor = subTone === 'danger' ? '#dc2626' : '#94a3b8';
 
     return (
-    <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '2px' }}>
-        <div style={{ display: 'flex', gap: '6px', justifyContent: 'space-between', fontSize: '0.66rem', lineHeight: 1.25 }}>
+    <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: compact ? '1px' : '2px' }}>
+        <div style={{ display: 'flex', gap: compact ? '4px' : '6px', justifyContent: 'space-between', fontSize: compact ? '0.64rem' : '0.66rem', lineHeight: 1.22 }}>
             <span style={{ color: leftColor, fontWeight: '800', whiteSpace: 'nowrap' }}>{left}</span>
             <span style={{ color: rightColor, fontWeight: '800', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{right}</span>
         </div>
