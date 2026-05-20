@@ -295,7 +295,10 @@ const StaffBeverageServingSheet = ({ onBack }) => {
                         summaryMap[drink] = { count: 0, deduction: 0, users: [] };
                     }
                     summaryMap[drink].count += 1;
-                    summaryMap[drink].users.push(user.name);
+                    summaryMap[drink].users.push({
+                        name: user.name,
+                        deducted: lateLeaveUserIds.has(user.id)
+                    });
                 });
                 if (lateLeaveUserIds.has(user.id)) {
                     drinks.forEach((drink) => {
@@ -575,7 +578,7 @@ const splitDrinkSummary = (summaryMap) => {
 };
 
 const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
-    <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '0.72fr 1.25fr 0.82fr 1fr', gap: '6px', marginTop: '6px', paddingBottom: '8px' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '0.72fr 0.82fr 1.25fr 1fr', gap: '6px', marginTop: '6px', paddingBottom: '8px' }}>
         <InfoPanel title="음료 수정">
             {beverageEvents.length === 0 ? (
                 <EmptyText text="음료 변경 내역 없음" />
@@ -586,14 +589,6 @@ const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
                     right={item.action}
                     compact
                 />
-            ))}
-        </InfoPanel>
-
-        <InfoPanel title="텀블러 수량">
-            {drinkSummary.tumbler.length === 0 ? (
-                <EmptyText text="텀블러 수량 없음" />
-            ) : drinkSummary.tumbler.map((item) => (
-                <DrinkSummaryLine key={item.name} item={item} showUsers />
             ))}
         </InfoPanel>
 
@@ -608,6 +603,14 @@ const InfoPanels = ({ beverageEvents, leaveEvents, drinkSummary }) => (
                     tone={item.tone}
                     compact
                 />
+            ))}
+        </InfoPanel>
+
+        <InfoPanel title="텀블러 수량">
+            {drinkSummary.tumbler.length === 0 ? (
+                <EmptyText text="텀블러 수량 없음" />
+            ) : drinkSummary.tumbler.map((item) => (
+                <DrinkSummaryLine key={item.name} item={item} showUsers />
             ))}
         </InfoPanel>
 
@@ -639,9 +642,10 @@ const DrinkSummaryLine = ({ item, showUsers = false }) => (
         </div>
         {showUsers && item.users.length > 0 && (
             <div style={{ marginTop: '3px', display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                {item.users.map((name, index) => (
-                    <span key={`${item.name}_${name}_${index}`} style={{ color: '#64748b', fontSize: '0.66rem', fontWeight: '800', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {name}
+                {item.users.map((user, index) => (
+                    <span key={`${item.name}_${user.name}_${index}`} style={{ color: '#64748b', fontSize: '0.66rem', fontWeight: '800', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {user.name}
+                        {user.deducted && <span style={{ marginLeft: '3px', color: '#dc2626' }}>(-)</span>}
                     </span>
                 ))}
             </div>
